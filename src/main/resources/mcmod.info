@@ -1,0 +1,16 @@
+[
+{
+  "modid": "test-mod",
+  "name": "Test Mod",
+  "description": "A test mod for forge-clj",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["yoshiquest"],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
