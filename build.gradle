@@ -28,8 +28,8 @@ clojure.aotCompile = true
 apply plugin: 'forge'
 
 version = "1.0"
-group= "forge_clj.testmod.test-mod" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
-archivesBaseName = "test-mod"
+group= "forge_clj.core" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
+archivesBaseName = "forge_clj"
 
 minecraft {
     version = "1.7.10-10.13.4.1448-1.7.10"
