@@ -27,7 +27,7 @@ clojure.aotCompile = true
 
 apply plugin: 'forge'
 
-version = "1.0"
+version = "0.1.0"
 group= "forge_clj.core" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "forge_clj"
 

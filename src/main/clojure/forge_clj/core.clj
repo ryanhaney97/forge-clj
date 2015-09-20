@@ -2,43 +2,16 @@
   (:require
    [clojure.string :as string])
   (:import
+   [java.lang NoSuchFieldError]
    [net.minecraft.block Block]
    [net.minecraft.item Item ItemStack]
    [net.minecraft.block.material Material]
    [net.minecraft.creativetab CreativeTabs]
    [cpw.mods.fml.common.registry GameRegistry]
-   [cpw.mods.fml.common ILanguageAdapter Mod Mod$EventHandler]
+   [cpw.mods.fml.common ILanguageAdapter Mod Mod$EventHandler FMLCommonHandler]
    [cpw.mods.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
-(gen-class
- :name forge_clj.core.ClojureAdapter
- :implements [cpw.mods.fml.common.ILanguageAdapter]
- :constructors {[] []}
- :prefix "adapter-")
-
-(defn adapter-getNewInstance [this container cljclass classloader method]
-  (if method
-    (.invoke method nil)
-    (.newInstance cljclass)))
-
-(defn adapter-supportsStatics [this]
-  true)
-
-(defn adapter-setProxy [this target proxy-target proxy-obj])
-
-(defn adapter-setInternalProxies [this modcontainer side loader]
-  (let [proxy-target (.getClass (.getMod modcontainer))
-        mod-ns (apply str (rest (string/split (str proxy-target) #"\s")))
-        mod-name (last (string/split mod-ns #"\."))
-        target-ns (reduce #(str %1 "." %2) (butlast (string/split mod-ns #"\.")))
-        target-ns-other (symbol (string/replace target-ns "_" "-"))
-        required-ns [(symbol target-ns-other)]
-        _ (require required-ns)
-        target-atom (load-string (str target-ns-other "/modproxy"))
-        imported-ns (symbol (str target-ns " CommonProxy ClientProxy"))
-        _ (load-string (str "(import '(" imported-ns "))"))
-        proxy-obj (if (.isClient side) (load-string (str "(new " target-ns ".ClientProxy)")) (load-string (str "(new " target-ns ".CommonProxy)")))]
-    (reset! target-atom proxy-obj)))
+(declare client?)
 
 (defn gen-setter [k]
   (let [key-name (reduce str (rest (str k)))
@@ -58,71 +31,39 @@
         class-name (apply str (map string/capitalize words))]
     (symbol class-name)))
 
-(defmacro defcommonproxy [name-ns & funcs]
-  (let [prefix (symbol (str (gensym "common") "-"))
-        funcs (apply hash-map funcs)
-        pre-init-func (if (:pre-init funcs) `(~(:pre-init funcs) ~'event) nil)
-        init-func (if (:init funcs) `(~(:init funcs) ~'event) nil)
-        post-init-func (if (:post-init funcs) `(~(:post-init funcs) ~'event) nil)
-        commonname (symbol (str (string/replace name-ns #"-" "_") ".CommonProxy"))]
-    `(do
-       (gen-class
-        :name ~commonname
-        :prefix ~prefix
-        :methods [[~'preInit [cpw.mods.fml.common.event.FMLPreInitializationEvent] ~'void]
-                  [~'init [cpw.mods.fml.common.event.FMLInitializationEvent] ~'void]
-                  [~'postInit [cpw.mods.fml.common.event.FMLPostInitializationEvent] ~'void]])
-       (defn ~(symbol (str prefix "preInit")) [~'this ~'event]
-         ~pre-init-func)
-       (defn ~(symbol (str prefix "init")) [~'this ~'event]
-         ~init-func)
-       (defn ~(symbol (str prefix "postInit")) [~'this ~'event]
-         ~post-init-func))))
-
-(defmacro defclientproxy [name-ns & funcs]
-  (let [prefix (symbol (str (gensym "client") "-"))
-        funcs (apply hash-map funcs)
-        name-ns-other (symbol (string/replace (str name-ns) "-" "_"))
-        pre-init-func (if (:pre-init funcs) `(~(:pre-init funcs) ~'event) nil)
-        init-func (if (:init funcs) `(~(:init funcs) ~'event) nil)
-        post-init-func (if (:post-init funcs) `(~(:post-init funcs) ~'event) nil)
-        clientname (symbol (str (string/replace name-ns #"-" "_") ".ClientProxy"))]
-    `(do
-       (gen-class
-        :name ~clientname
-        :prefix ~prefix
-        :methods [[~'preInit [cpw.mods.fml.common.event.FMLPreInitializationEvent] ~'void]
-                  [~'init [cpw.mods.fml.common.event.FMLInitializationEvent] ~'void]
-                  [~'postInit [cpw.mods.fml.common.event.FMLPostInitializationEvent] ~'void]])
-       (defn ~(symbol (str prefix "preInit")) [~'this ~'event]
-         (.preInit (new ~(symbol (str name-ns-other ".CommonProxy"))) ~'event)
-         ~pre-init-func)
-       (defn ~(symbol (str prefix "init")) [~'this ~'event]
-         (.init (new ~(symbol (str name-ns-other ".CommonProxy"))) ~'event)
-         ~init-func)
-       (defn ~(symbol (str prefix "postInit")) [~'this ~'event]
-         (.postInit (new ~(symbol (str name-ns-other ".CommonProxy"))) ~'event)
-         ~post-init-func))))
-
-(defmacro defmod [name-ns mod-name version]
-  (let [prefix (str mod-name "-")
+(defmacro defmod [name-ns mod-name version & proxies]
+  (let [proxies (apply hash-map proxies)
+        commonproxy (if (:common proxies) (:common proxies) {})
+        clientproxy (if (:client proxies) (:client proxies) {})
+        prefix (str mod-name "-")
         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname mod-name)))]
     `(do
        (gen-class
-        :name ~(with-meta fullname `{Mod {:name ~(str (gen-classname mod-name)) :modid ~(str mod-name) :version ~(str version) :modLanguageAdapter "forge_clj.core.ClojureAdapter"}})
+        :name ~(with-meta fullname `{Mod {:name ~(str (gen-classname mod-name)) :modid ~(str mod-name) :version ~(str version)}})
         :prefix ~(symbol prefix)
         :methods [[~(with-meta 'preInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPreInitializationEvent] ~(symbol "void")]
                   [~(with-meta 'init `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLInitializationEvent] ~(symbol "void")]
                   [~(with-meta 'postInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPostInitializationEvent] ~(symbol "void")]])
-       (def ~'modproxy (atom nil))
        (defn ~(symbol (str prefix "preInit")) [~'this ~'event]
-         ~'(.preInit @modproxy event))
+         ~(when (:pre-init commonproxy)
+            `(~(:pre-init commonproxy) ~'event))
+         (if client?
+           ~(when (:pre-init clientproxy)
+              `(~(:pre-init clientproxy) ~'event))))
 
        (defn ~(symbol (str prefix "init")) [~'this ~'event]
-         ~'(.init @modproxy event))
+         ~(when (:init commonproxy)
+            `(~(:init commonproxy) ~'event))
+         (if client?
+           ~(when (:init clientproxy)
+              `(~(:init clientproxy) ~'event))))
 
        (defn ~(symbol (str prefix "postInit")) [~'this ~'event]
-         ~'(.postInit @modproxy event)))))
+         ~(when (:post-init commonproxy)
+            `(~(:post-init commonproxy) ~'event))
+         (if client?
+           ~(when (:post-init clientproxy)
+              `(~(:post-init clientproxy) ~'event)))))))
 
 (defmacro defblock [block-name & args]
   (let [blockdata (apply hash-map args)
@@ -137,10 +78,8 @@
     (if overrides
       `(def ~block-name (doto (proxy [Block] [~material]
                                 ~@override-calls)
-                          (.setBlockName ~(str block-name))
                           ~@calls))
       `(def ~block-name (doto (proxy [Block] [~material])
-                          (.setBlockName ~(str block-name))
                           ~@calls)))))
 
 (defmacro defitem [item-name & args]
@@ -155,10 +94,8 @@
     (if overrides
       `(def ~item-name (doto (proxy [Item] []
                                ~@override-calls)
-                         (.setUnlocalizedName ~(str item-name))
                          ~@calls))
       `(def ~item-name (doto (proxy [Item] [])
-                         (.setUnlocalizedName ~(str item-name))
                          ~@calls)))))
 
 (defn convert-recipe [recipe]
@@ -189,17 +126,106 @@
 (defmethod register Item [element forge-name]
   (GameRegistry/registerItem element forge-name))
 
-(defmacro step-sound [k]
+(defn material-deploy [k]
+  (condp = k
+    :air net.minecraft.block.material.Material/air
+    :grass net.minecraft.block.material.Material/grass
+    :ground net.minecraft.block.material.Material/ground
+    :wood net.minecraft.block.material.Material/wood
+    :rock net.minecraft.block.material.Material/rock
+    :iron net.minecraft.block.material.Material/iron
+    :anvil net.minecraft.block.material.Material/anvil
+    :water net.minecraft.block.material.Material/water
+    :lava net.minecraft.block.material.Material/lava
+    :leaves net.minecraft.block.material.Material/leaves
+    :plants net.minecraft.block.material.Material/plants
+    :vine net.minecraft.block.material.Material/vine
+    :sponge net.minecraft.block.material.Material/sponge
+    :cloth net.minecraft.block.material.Material/cloth
+    :fire net.minecraft.block.material.Material/fire
+    :sand net.minecraft.block.material.Material/sand
+    :circuits net.minecraft.block.material.Material/circuits
+    :carpet net.minecraft.block.material.Material/carpet
+    :glass net.minecraft.block.material.Material/glass
+    :redstone-light net.minecraft.block.material.Material/redstoneLight
+    :tnt net.minecraft.block.material.Material/tnt
+    :coral net.minecraft.block.material.Material/coral
+    :ice net.minecraft.block.material.Material/ice
+    :packed-ice net.minecraft.block.material.Material/packedIce
+    :snow net.minecraft.block.material.Material/snow
+    :crafted-snow net.minecraft.block.material.Material/craftedSnow
+    :cactus net.minecraft.block.material.Material/cactus
+    :clay net.minecraft.block.material.Material/clay
+    :gourd net.minecraft.block.material.Material/gourd
+    :dragon-egg net.minecraft.block.material.Material/dragonEgg
+    :portal net.minecraft.block.material.Material/portal
+    :cake net.minecraft.block.material.Material/cake
+    :web net.minecraft.block.material.Material/web))
+
+(defn creative-tab-deploy [k]
+  (condp = k
+    :block net.minecraft.creativetab.CreativeTabs/tabBlock
+    :decorations net.minecraft.creativetab.CreativeTabs/tabDecorations
+    :redstone net.minecraft.creativetab.CreativeTabs/tabRedstone
+    :transport net.minecraft.creativetab.CreativeTabs/tabTransport
+    :misc net.minecraft.creativetab.CreativeTabs/tabMisc
+    :food net.minecraft.creativetab.CreativeTabs/tabFood
+    :tools net.minecraft.creativetab.CreativeTabs/tabTools
+    :combat net.minecraft.creativetab.CreativeTabs/tabCombat
+    :brewing net.minecraft.creativetab.CreativeTabs/tabBrewing
+    :materials net.minecraft.creativetab.CreativeTabs/tabMaterials))
+
+(defn step-sound-deploy [k]
+  (condp = k
+    :stone net.minecraft.block.Block/soundTypeStone
+    :wood net.minecraft.block.Block/soundTypeWood
+    :gravel net.minecraft.block.Block/soundTypeGravel
+    :grass net.minecraft.block.Block/soundTypeGrass
+    :piston net.minecraft.block.Block/soundTypePiston
+    :metal net.minecraft.block.Block/soundTypeMetal
+    :glass net.minecraft.block.Block/soundTypeGlass))
+
+(defmacro material-dev [k]
   (let [base "net.minecraft.block.material.Material/"
         soundtype (string/capitalize (str (gen-method k)))]
     (read-string (str base soundtype))))
 
-(defmacro creative-tab [k]
+(defmacro creative-tab-dev [k]
   (let [base "net.minecraft.creativetab.CreativeTabs/tab"
         soundtype (string/capitalize (str (gen-method k)))]
     (read-string (str base soundtype))))
 
-(defmacro step-sound [k]
+(defmacro step-sound-dev [k]
   (let [base "net.minecraft.block.Block/soundType"
         soundtype (string/capitalize (str (gen-method k)))]
     (read-string (str base soundtype))))
+
+(defmacro material [k]
+  `(try
+     (material-deploy ~k)
+     (catch NoSuchFieldError ~'e
+       (material-dev ~k))))
+
+(defmacro creative-tab [k]
+  `(try
+     (creative-tab-deploy ~k)
+     (catch NoSuchFieldError ~'e
+       (creative-tab-dev ~k))))
+
+(defmacro step-sound [k]
+  `(try
+     (step-sound-deploy ~k)
+     (catch NoSuchFieldError ~'e
+       (step-sound-dev ~k))))
+
+(gen-class
+ :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.1.0"}} forge_clj.core.ForgeClj
+ :prefix "forge-clj-"
+ :methods [[^{Mod$EventHandler []} preInit [cpw.mods.fml.common.event.FMLPreInitializationEvent] void]
+           [^{Mod$EventHandler []} init [cpw.mods.fml.common.event.FMLInitializationEvent] void]
+           [^{Mod$EventHandler []} postInit [cpw.mods.fml.common.event.FMLPostInitializationEvent] void]])
+
+(defn forge-clj-preInit [this event]
+  (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
+(defn forge-clj-init [this event])
+(defn forge-clj-postInit [this event])

@@ -12,6 +12,8 @@ NOTE: DON'T USE THIS YET UNLESS YOU WANT TO HELP DEVELOP FORGE-CLJ. This really 
 
 ##Changelog
 
+- Version 0.1.0: Lots of changes here: First, I added a working proxy system, to allow for client and common proxies. Second, I separated the test mod and forge-clj, so now they work independently. Finally, I fixed the ability to access certain fields (like creative-tab and sound-type), so that they work both in the dev environment and in a normal minecraft installation.
+
 - Version 0.0.1: Initial Commit
 
 ## License
