@@ -87,30 +87,8 @@
            ~(when (:post-init clientproxy)
               `(~(:post-init clientproxy) ~'this ~'event)))))))
 
-;Given the name of a block, and a series of keywords and values representing the properties of the block,
-;generates a Block object with the specified properties. Methods can be overriden using the :override keyword.
-(defmacro defblock [block-name & args]
-  (let [blockdata (apply hash-map args)
-        material (if (:material blockdata) (:material blockdata) `Material/rock)
-        overrides (:override blockdata)
-        override-methods (when overrides (map gen-method (keys overrides)))
-        override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
-        override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
-        blockdata (dissoc blockdata :material :override)
-        setters (map gen-setter (keys blockdata))
-        calls (map #(list %1 %2) setters (vals blockdata))]
-    (if overrides
-      `(def ~block-name (doto (proxy [Block] [~material]
-                                ~@override-calls)
-                          ~@calls))
-      `(def ~block-name (doto (proxy [Block] [~material])
-                          ~@calls)))))
-
-;Given the name of an item, and a series of keywords and values representing the properties of the item,
-;generates an Item object with the specified properties. Methods can be overriden using the :override keyword.
-(defmacro defitem [item-name & args]
-  (let [itemdata (apply hash-map args)
-        overrides (:override itemdata)
+(defmacro defobj [superclass constructor-args item-name itemdata]
+  (let [overrides (:override itemdata)
         override-methods (when overrides (map gen-method (keys overrides)))
         override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
         override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
@@ -118,11 +96,25 @@
         setters (map gen-setter (keys itemdata))
         calls (map #(list %1 %2) setters (vals itemdata))]
     (if overrides
-      `(def ~item-name (doto (proxy [Item] []
+      `(def ~item-name (doto (proxy [~superclass] ~constructor-args
                                ~@override-calls)
                          ~@calls))
-      `(def ~item-name (doto (proxy [Item] [])
+      `(def ~item-name (doto (proxy [~superclass] ~constructor-args)
                          ~@calls)))))
+
+;Given the name of a block, and a series of keywords and values representing the properties of the block,
+;generates a Block object with the specified properties. Methods can be overriden using the :override keyword.
+(defmacro defblock [block-name & args]
+  (let [blockdata (apply hash-map args)
+        material (if (:material blockdata) (:material blockdata) `Material/rock)
+        blockdata (dissoc blockdata :material)]
+    `(defobj Block [~material] ~block-name ~blockdata)))
+
+;Given the name of an item, and a series of keywords and values representing the properties of the item,
+;generates an Item object with the specified properties. Methods can be overriden using the :override keyword.
+(defmacro defitem [item-name & args]
+  (let [itemdata (apply hash-map args)]
+    `(defobj Item [] ~item-name ~itemdata)))
 
 ;Given the respective arguments, creates a tool material.
 (defmacro deftoolmaterial [material-name harvest-level durability mining-speed damage enchantability]
@@ -132,13 +124,6 @@
 ;as well as the type of the tool.
 (defmacro deftool [item-name material tooltype & args]
   (let [itemdata (apply hash-map args)
-        overrides (:override itemdata)
-        override-methods (when overrides (map gen-method (keys overrides)))
-        override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
-        override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
-        itemdata (dissoc itemdata :override)
-        setters (map gen-setter (keys itemdata))
-        calls (map #(list %1 %2) setters (vals itemdata))
         tool (condp = tooltype
                :sword `ItemSword
                :pickaxe `ItemAxe
@@ -147,12 +132,7 @@
                :shovel `ItemSpade
                :hoe `ItemHoe
                tooltype)]
-    (if overrides
-      `(def ~item-name (doto (proxy [~tool] [~material]
-                               ~@override-calls)
-                         ~@calls))
-      `(def ~item-name (doto (proxy [~tool] [~material])
-                         ~@calls)))))
+    `(defobj ~tool [~material] ~item-name ~itemdata)))
 
 ;Given the respective arguments, creates an armor material.
 (defmacro defarmormaterial [material-name durability damage-reduction enchantability]
@@ -167,62 +147,29 @@
 (defmacro defarmor [item-name material armortype & args]
   (let [itemdata (apply hash-map args)
         renderindex (if (:renderindex itemdata) (:renderindex itemdata) 0)
-        overrides (:override itemdata)
-        override-methods (when overrides (map gen-method (keys overrides)))
-        override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
-        override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
-        itemdata (dissoc itemdata :override :renderindex)
-        setters (map gen-setter (keys itemdata))
-        calls (map #(list %1 %2) setters (vals itemdata))
+        itemdata (dissoc itemdata :renderindex)
         armor (condp = armortype
                 :helmet 0
                 :chestplate 1
                 :leggings 2
                 :boots 3
                 armortype)]
-    (if overrides
-      `(def ~item-name (doto (proxy [ItemArmor] [~material ~renderindex ~armor]
-                               ~@override-calls)
-                         ~@calls))
-      `(def ~item-name (doto (proxy [ItemArmor] [~material ~renderindex ~armor])
-                         ~@calls)))))
+    `(defobj ItemArmor [~material ~renderindex ~armor] ~item-name ~itemdata)))
 
 ;Given the respective arguments, creates food.
 (defmacro deffood [item-name heal-amount saturation-modifier & args]
   (let [itemdata (apply hash-map args)
         wolves-favorite? (some? (:wolves-favorite? itemdata))
-        overrides (:override itemdata)
-        override-methods (when overrides (map gen-method (keys overrides)))
-        override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
-        override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
-        itemdata (dissoc itemdata :override :wolves-favorite?)
-        setters (map gen-setter (keys itemdata))
-        calls (map #(list %1 %2) setters (vals itemdata))]
-    (if overrides
-      `(def ~item-name (doto (proxy [ItemFood] [~heal-amount ~(float saturation-modifier) ~wolves-favorite?]
-                               ~@override-calls)
-                         ~@calls))
-      `(def ~item-name (doto (proxy [ItemFood] [~heal-amount ~(float saturation-modifier) ~wolves-favorite?])
-                         ~@calls)))))
+        itemdata (dissoc itemdata :wolves-favorite?)]
+    `(defobj ItemFood [~heal-amount ~(float saturation-modifier) ~wolves-favorite?] ~item-name ~itemdata)))
 
 ;Given a previously defined block, creates an item for that block (aka an ItemBlock).
 ;Register this together with the block referenced.
 (defmacro defblockitem [item-name block & args]
   (let [itemdata (apply hash-map args)
-        overrides (:override itemdata)
-        override-methods (when overrides (map gen-method (keys overrides)))
-        override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
-        override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
         meta? (:metadata? itemdata)
-        itemdata (dissoc itemdata :override :metadata?)
-        setters (map gen-setter (keys itemdata))
-        calls (map #(list %1 %2) setters (vals itemdata))]
-    (if overrides
-      `(def ~item-name (doto (proxy [~(if meta? `ItemBlockWithMetadata `ItemBlock)] ~(if meta? [block block] [block])
-                               ~@override-calls)
-                         ~@calls))
-      `(def ~item-name (doto (proxy [~(if meta? `ItemBlockWithMetadata `ItemBlock)] ~(if meta? [block block] [block]))
-                         ~@calls)))))
+        itemdata (dissoc itemdata :metadata?)]
+    `(defobj ~(if meta? `ItemBlockWithMetadata `ItemBlock) ~(if meta? [block block] [block]) ~item-name ~itemdata)))
 
 ;A simple map allowing easy conversion between dimensions and their ids.
 (def dimension {:overworld 0
@@ -244,6 +191,21 @@
         func (get generate-fns dimension-id)]
     (when func
       (func world random chunk-x chunk-z))))
+
+;Extremely basic function that returns the absolute value of a number. For convenience.
+(defn abs [n]
+  (if (< n 0)
+    (* -1 n)
+    n))
+
+;Given a generator, world, Random object (must be an object!), a chunk x value, a chunk z value,
+;the number of chances to spawn, and the heights, runs the respective generator at random locations in the chunk,
+;according to the Random object.
+(defmacro run-default-generator [^WorldGenerator generator ^World world ^Random rand-obj chunk-x chunk-z chances height1 height2]
+  `(loop [~'chance ~chances]
+     (when (< 0 ~'chance)
+       (.generate ~generator ~world ~rand-obj (+ (* 16 ~chunk-x) (.nextInt ~rand-obj 16)) (+ ~height1 (.nextInt ~rand-obj (abs (- ~height1 ~height2)))) (+ (* 16 ~chunk-z) (.nextInt ~rand-obj 16)))
+       (recur (dec ~'chance)))))
 
 ;Given a name and a series of dimension-generator pairs, creates a generator that runs the correct generatior function.
 (defmacro defgenerate [generator-name & generate-fns]
@@ -371,21 +333,6 @@
     :piston net.minecraft.block.Block/soundTypePiston
     :metal net.minecraft.block.Block/soundTypeMetal
     :glass net.minecraft.block.Block/soundTypeGlass))
-
-;Extremely basic function that returns the absolute value of a number. For convenience.
-(defn abs [n]
-  (if (< n 0)
-    (* -1 n)
-    n))
-
-;Given a generator, world, Random object (must be an object!), a chunk x value, a chunk z value,
-;the number of chances to spawn, and the heights, runs the respective generator at random locations in the chunk,
-;according to the Random object.
-(defmacro run-default-generator [^WorldGenerator generator ^World world ^Random rand-obj chunk-x chunk-z chances height1 height2]
-  `(loop [~'chance ~chances]
-     (when (< 0 ~'chance)
-       (.generate ~generator ~world ~rand-obj (+ (* 16 ~chunk-x) (.nextInt ~rand-obj 16)) (+ ~height1 (.nextInt ~rand-obj (abs (- ~height1 ~height2)))) (+ (* 16 ~chunk-z) (.nextInt ~rand-obj 16)))
-       (recur (dec ~'chance)))))
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class
