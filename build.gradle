@@ -27,13 +27,18 @@ clojure.aotCompile = true
 
 apply plugin: 'forge'
 
-version = "0.1.0"
+version = ""
 group= "forge_clj.core" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "forge_clj"
 
 minecraft {
     version = "1.7.10-10.13.4.1448-1.7.10"
     runDir = "eclipse"
+}
+
+configurations {
+	shade
+	compile.extendsFrom shade
 }
 
 dependencies {
@@ -50,9 +55,24 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
-	compile 'org.clojure:clojure:1.7.0'
+	shade 'org.clojure:clojure:1.7.0'
 
 }
+
+jar {
+    configurations.shade.each { dep ->
+        from(project.zipTree(dep)){
+            exclude 'META-INF', 'META-INF/**'
+        }
+    }
+}
+
+task deobfJar(type: Jar) {
+    from sourceSets.main.output
+    classifier = 'dev'
+}
+
+tasks.build.dependsOn('deobfJar')
 
 processResources
 {
