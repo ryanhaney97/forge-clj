@@ -5,11 +5,12 @@
    [clojure.set :as cset])
   (:import
    [java.util Random]
-   [net.minecraft.block Block]
+   [net.minecraft.block Block BlockContainer]
    [net.minecraft.block.material Material]
    [net.minecraft.item Item ItemStack ItemBlock ItemBlockWithMetadata ItemArmor ItemFood ItemSword ItemPickaxe ItemAxe ItemSpade ItemHoe]
    [net.minecraft.world.gen.feature WorldGenerator]
    [net.minecraft.world World]
+   [net.minecraft.tileentity TileEntity]
    [net.minecraftforge.common.util EnumHelper]
    [cpw.mods.fml.common.registry GameRegistry]
    [cpw.mods.fml.common IWorldGenerator Mod Mod$EventHandler FMLCommonHandler]
@@ -93,23 +94,43 @@
         override-methods (when overrides (map gen-method (keys overrides)))
         override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
         override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
-        objdata (dissoc objdata :override)
+        interfaces (:interfaces objdata)
+        objdata (dissoc objdata :override :interfaces)
         setters (map gen-setter (keys objdata))
-        calls (map #(list %1 %2) setters (vals objdata))]
+        calls (map #(list %1 %2) setters (vals objdata))
+        super-vector (if interfaces (concat [superclass] interfaces) [superclass])]
     (if overrides
-      `(def ~obj-name (doto (proxy [~superclass] ~constructor-args
-                               ~@override-calls)
-                         ~@calls))
-      `(def ~obj-name (doto (proxy [~superclass] ~constructor-args)
-                         ~@calls)))))
+      `(def ~obj-name (doto (proxy ~super-vector ~constructor-args
+                              ~@override-calls)
+                        ~@calls))
+      `(def ~obj-name (doto (proxy ~super-vector ~constructor-args)
+                        ~@calls)))))
+
+;General purpose macro used to extend objects.
+;Similar to defobj at first glance, except that this generates an actual class instead of an anonymous instance.
+(defmacro defclass [superclass name-ns class-name interfaces]
+  (let [prefix (str class-name "-")
+        fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))]
+    `(do
+       (gen-class
+        :name ~fullname
+        :prefix ~prefix
+        :extends ~superclass
+        :implements ~interfaces)
+       (def ~class-name ~fullname))))
+
+;Creates a Tile Entity class.
+(defmacro deftileentity [name-ns class-name & interfaces]
+  `(defclass TileEntity ~name-ns ~class-name ~interfaces))
 
 ;Given the name of a block, and a series of keywords and values representing the properties of the block,
 ;generates a Block object with the specified properties. Methods can be overriden using the :override keyword.
 (defmacro defblock [block-name & args]
   (let [blockdata (apply hash-map args)
         material (if (:material blockdata) (:material blockdata) `Material/rock)
-        blockdata (dissoc blockdata :material)]
-    `(defobj Block [~material] ~block-name ~blockdata)))
+        container? (:container? blockdata)
+        blockdata (dissoc blockdata :material :container?)]
+    `(defobj ~(if container? `BlockContainer `Block) [~material] ~block-name ~blockdata)))
 
 ;Given the name of an item, and a series of keywords and values representing the properties of the item,
 ;generates an Item object with the specified properties. Methods can be overriden using the :override keyword.
@@ -270,6 +291,9 @@
   (register generator 0))
 (defmethod register [1 IWorldGenerator] [generator mod-priority]
   (GameRegistry/registerWorldGenerator generator mod-priority))
+
+(defn register-tile-entity [entity id]
+  (GameRegistry/registerTileEntity entity id))
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class

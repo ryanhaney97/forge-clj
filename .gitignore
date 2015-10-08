@@ -1,0 +1,12 @@
+.gradle/
+CREDITS-fml.txt
+LICENSE-fml.txt
+MinecraftForge-Credits.txt
+MinecraftForge-License.txt
+eclipse/
+forge-1.7.10-10.13.4.1448-1.7.10-changelog.txt
+gradle/
+gradlew
+gradlew.bat
+logs/
+update-test
