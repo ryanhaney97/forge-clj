@@ -6,9 +6,8 @@
   (:import
    [java.util Random]
    [net.minecraft.block Block]
-   [net.minecraft.item Item ItemStack ItemBlock ItemBlockWithMetadata ItemArmor ItemFood ItemSword ItemPickaxe ItemAxe ItemSpade ItemHoe]
    [net.minecraft.block.material Material]
-   [net.minecraft.creativetab CreativeTabs]
+   [net.minecraft.item Item ItemStack ItemBlock ItemBlockWithMetadata ItemArmor ItemFood ItemSword ItemPickaxe ItemAxe ItemSpade ItemHoe]
    [net.minecraft.world.gen.feature WorldGenerator]
    [net.minecraft.world World]
    [net.minecraftforge.common.util EnumHelper]
@@ -87,19 +86,21 @@
            ~(when (:post-init clientproxy)
               `(~(:post-init clientproxy) ~'this ~'event)))))))
 
-(defmacro defobj [superclass constructor-args item-name itemdata]
-  (let [overrides (:override itemdata)
+;General purpose macro used to extend objects. Takes the superclass, constructor arguments (as a vector), the name,
+;and the data (as a map), to create an instance of an anonymous class that extends the provided superclass.
+(defmacro defobj [superclass constructor-args obj-name objdata]
+  (let [overrides (:override objdata)
         override-methods (when overrides (map gen-method (keys overrides)))
         override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
         override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
-        itemdata (dissoc itemdata :override)
-        setters (map gen-setter (keys itemdata))
-        calls (map #(list %1 %2) setters (vals itemdata))]
+        objdata (dissoc objdata :override)
+        setters (map gen-setter (keys objdata))
+        calls (map #(list %1 %2) setters (vals objdata))]
     (if overrides
-      `(def ~item-name (doto (proxy [~superclass] ~constructor-args
+      `(def ~obj-name (doto (proxy [~superclass] ~constructor-args
                                ~@override-calls)
                          ~@calls))
-      `(def ~item-name (doto (proxy [~superclass] ~constructor-args)
+      `(def ~obj-name (doto (proxy [~superclass] ~constructor-args)
                          ~@calls)))))
 
 ;Given the name of a block, and a series of keywords and values representing the properties of the block,
@@ -254,89 +255,25 @@
   (GameRegistry/addSmelting input (ItemStack. output) (float exp)))
 
 ;A series of register functions. When calling "register", the proper function will be called underneath.
-(defmulti register (fn [element forge-name & args] [(count args) (type element)]))
-(defmethod register [0 Block] [element forge-name]
+(defmulti register (fn [element & args] [(count args) (type element)]))
+(defmethod register [1 Block] [element forge-name]
   (GameRegistry/registerBlock element forge-name)
   element)
-(defmethod register [0 Item] [element forge-name]
+(defmethod register [1 Item] [element forge-name]
   (GameRegistry/registerItem element forge-name)
   element)
-(defmethod register [1 Block] [element forge-name blockitem]
+(defmethod register [2 Block] [element forge-name blockitem]
   (GameRegistry/registerBlock element nil forge-name (object-array []))
   (GameRegistry/registerItem blockitem forge-name)
   element)
-
-;Registers a generator. I hope to fit this with the previous register functions soon.
-(defn register-generator
-  ([generator]
-   (register-generator generator 0))
-  ([generator mod-priority]
-   (GameRegistry/registerWorldGenerator generator mod-priority)))
-
-;A series of field functions (material, creative-tab, and steps-sound).
-;Still needs a refactor, but it's better now than before.
-(defn material [k]
-  (condp = k
-    :air net.minecraft.block.material.Material/air
-    :grass net.minecraft.block.material.Material/grass
-    :ground net.minecraft.block.material.Material/ground
-    :wood net.minecraft.block.material.Material/wood
-    :rock net.minecraft.block.material.Material/rock
-    :iron net.minecraft.block.material.Material/iron
-    :anvil net.minecraft.block.material.Material/anvil
-    :water net.minecraft.block.material.Material/water
-    :lava net.minecraft.block.material.Material/lava
-    :leaves net.minecraft.block.material.Material/leaves
-    :plants net.minecraft.block.material.Material/plants
-    :vine net.minecraft.block.material.Material/vine
-    :sponge net.minecraft.block.material.Material/sponge
-    :cloth net.minecraft.block.material.Material/cloth
-    :fire net.minecraft.block.material.Material/fire
-    :sand net.minecraft.block.material.Material/sand
-    :circuits net.minecraft.block.material.Material/circuits
-    :carpet net.minecraft.block.material.Material/carpet
-    :glass net.minecraft.block.material.Material/glass
-    :redstone-light net.minecraft.block.material.Material/redstoneLight
-    :tnt net.minecraft.block.material.Material/tnt
-    :coral net.minecraft.block.material.Material/coral
-    :ice net.minecraft.block.material.Material/ice
-    :packed-ice net.minecraft.block.material.Material/packedIce
-    :snow net.minecraft.block.material.Material/snow
-    :crafted-snow net.minecraft.block.material.Material/craftedSnow
-    :cactus net.minecraft.block.material.Material/cactus
-    :clay net.minecraft.block.material.Material/clay
-    :gourd net.minecraft.block.material.Material/gourd
-    :dragon-egg net.minecraft.block.material.Material/dragonEgg
-    :portal net.minecraft.block.material.Material/portal
-    :cake net.minecraft.block.material.Material/cake
-    :web net.minecraft.block.material.Material/web))
-
-(defn creative-tab [k]
-  (condp = k
-    :block net.minecraft.creativetab.CreativeTabs/tabBlock
-    :decorations net.minecraft.creativetab.CreativeTabs/tabDecorations
-    :redstone net.minecraft.creativetab.CreativeTabs/tabRedstone
-    :transport net.minecraft.creativetab.CreativeTabs/tabTransport
-    :misc net.minecraft.creativetab.CreativeTabs/tabMisc
-    :food net.minecraft.creativetab.CreativeTabs/tabFood
-    :tools net.minecraft.creativetab.CreativeTabs/tabTools
-    :combat net.minecraft.creativetab.CreativeTabs/tabCombat
-    :brewing net.minecraft.creativetab.CreativeTabs/tabBrewing
-    :materials net.minecraft.creativetab.CreativeTabs/tabMaterials))
-
-(defn step-sound [k]
-  (condp = k
-    :stone net.minecraft.block.Block/soundTypeStone
-    :wood net.minecraft.block.Block/soundTypeWood
-    :gravel net.minecraft.block.Block/soundTypeGravel
-    :grass net.minecraft.block.Block/soundTypeGrass
-    :piston net.minecraft.block.Block/soundTypePiston
-    :metal net.minecraft.block.Block/soundTypeMetal
-    :glass net.minecraft.block.Block/soundTypeGlass))
+(defmethod register [0 IWorldGenerator] [generator]
+  (register generator 0))
+(defmethod register [1 IWorldGenerator] [generator mod-priority]
+  (GameRegistry/registerWorldGenerator generator mod-priority))
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class
- :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.2.0"}} forge_clj.core.ForgeClj
+ :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.2.1"}} forge_clj.core.ForgeClj
  :prefix "forge-clj-"
  :methods [[^{Mod$EventHandler []} preInit [cpw.mods.fml.common.event.FMLPreInitializationEvent] void]
            [^{Mod$EventHandler []} init [cpw.mods.fml.common.event.FMLInitializationEvent] void]
