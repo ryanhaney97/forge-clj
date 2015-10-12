@@ -386,7 +386,7 @@
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class
- :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.2.1"}} forge_clj.core.ForgeClj
+ :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.2.2"}} forge_clj.core.ForgeClj
  :prefix "forge-clj-"
  :methods [[^{Mod$EventHandler []} preInit [cpw.mods.fml.common.event.FMLPreInitializationEvent] void]
            [^{Mod$EventHandler []} init [cpw.mods.fml.common.event.FMLInitializationEvent] void]

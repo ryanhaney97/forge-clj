@@ -20,11 +20,15 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 
 ##Downloads
 
+- Version 0.2.2: [forge-clj](http://bit.ly/1NCq8vM "forge-clj Version 0.2.2") [forge-clj devkit](http://bit.ly/1jsIHFC "forge-clj devkit Version 0.2.2")
+
 - Version 0.2.1: [forge-clj](http://bit.ly/1WOmksN "forge-clj Version 0.2.1") [forge-clj devkit](http://bit.ly/1LmEj1n "forge-clj devkit Version 0.2.1")
 
 - Version 0.2.0: [forge-clj](http://bit.ly/1FTJ5HO "forge-clj Version 0.2.0") [forge-clj devkit](http://bit.ly/1jOENra "forge-clj devkit Version 0.2.0")
 
 ##Changelog
+
+- Version 0.2.2: This update focuses on Tile Entities and NBT data. First, you now have the ability to create Tile Entities. Note that for Tile Entities, a CLASS is generated, rather than an instance like normal, so it'll be a bit different to work with. Next, I added the ability to convert Minecraft's NBT data into a Clojure map and back. Finally, I added a system that will automatically store this converted nbt data in an atom of your choice, using a unique key underneath in order to separate the instances.
 
 - Version 0.2.1: Improved the defx (defblock, defitem, etc.) macros. Instead of being the same thing over and over again, I now have a defobj macro that they all use instead. I also removed the field functions (creative-tab, step-sound, etc.), since they were pretty redundent, were a pain to make and maintain, and the amound of code needed by the user really didn't change. Just use java interop instead. I also merged the register-generator function with the rest of the register functions, so now you only need to call 1 function again.
 
