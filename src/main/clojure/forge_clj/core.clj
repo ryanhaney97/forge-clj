@@ -10,6 +10,7 @@
    [net.minecraft.item Item ItemStack ItemBlock ItemBlockWithMetadata ItemArmor ItemFood ItemSword ItemPickaxe ItemAxe ItemSpade ItemHoe]
    [net.minecraft.world.gen.feature WorldGenerator]
    [net.minecraft.world World]
+   [net.minecraft.nbt NBTBase NBTTagCompound NBTTagByte NBTTagShort NBTTagInt NBTTagLong NBTTagFloat NBTTagDouble NBTTagByteArray NBTTagIntArray NBTTagString NBTTagList]
    [net.minecraft.tileentity TileEntity]
    [net.minecraftforge.common.util EnumHelper]
    [cpw.mods.fml.common.registry GameRegistry]
@@ -108,20 +109,24 @@
 
 ;General purpose macro used to extend objects.
 ;Similar to defobj at first glance, except that this generates an actual class instead of an anonymous instance.
-(defmacro defclass [superclass name-ns class-name interfaces]
-  (let [prefix (str class-name "-")
+(defmacro defclass [superclass name-ns class-name classdata]
+  (let [super-methods (:expose classdata)
+        interfaces (:interfaces classdata)
+        prefix (str class-name "-")
         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))]
     `(do
        (gen-class
         :name ~fullname
         :prefix ~prefix
         :extends ~superclass
+        :exposes-methods ~super-methods
         :implements ~interfaces)
        (def ~class-name ~fullname))))
 
 ;Creates a Tile Entity class.
-(defmacro deftileentity [name-ns class-name & interfaces]
-  `(defclass TileEntity ~name-ns ~class-name ~interfaces))
+(defmacro deftileentity [name-ns class-name & args]
+  (let [classdata (apply hash-map args)]
+    `(defclass TileEntity ~name-ns ~class-name ~classdata)))
 
 ;Given the name of a block, and a series of keywords and values representing the properties of the block,
 ;generates a Block object with the specified properties. Methods can be overriden using the :override keyword.
@@ -294,6 +299,90 @@
 
 (defn register-tile-entity [entity id]
   (GameRegistry/registerTileEntity entity id))
+
+(defn string-tag-handler [s]
+  (condp = s
+    "true" true
+    "false" false
+    "nil" nil
+    s))
+
+(defn nbt-key-val-pair [^NBTTagCompound nbt k]
+  (let [tag (.getTag nbt k)
+        value (condp instance? tag
+                NBTTagByte (.getByte nbt k)
+                NBTTagShort (.getShort nbt k)
+                NBTTagInt (.getInteger nbt k)
+                NBTTagLong (.getLong nbt k)
+                NBTTagFloat (.getFloat nbt k)
+                NBTTagDouble (.getDouble nbt k)
+                NBTTagByteArray (into [] (.getByteArray nbt k))
+                NBTTagIntArray (into [] (.getIntArray nbt k))
+                NBTTagString (string-tag-handler (.getString nbt k))
+                NBTTagCompound (.getCompoundTag nbt k)
+                tag)]
+    [(keyword k) value]))
+
+(defn nbt->map [^NBTTagCompound nbt]
+  (let [nbt-json (str nbt)
+        removed-braces (apply str (butlast (rest nbt-json)))
+        pairs (string/split removed-braces #"[^\\],")
+        nbt-keys (map #(first (string/split %1 #":")) pairs)
+        nbt-keys (filter (complement empty?) nbt-keys)
+        nbt-pairs (mapv (partial nbt-key-val-pair nbt) nbt-keys)
+        nbt-map (into {} nbt-pairs)]
+    nbt-map))
+
+(defn read-tag-data! [^NBTTagCompound nbt entity-atom]
+  (let [data (nbt->map nbt)
+        data-key [(:x data) (:y data) (:z data)]]
+    (swap! entity-atom assoc data-key data)))
+
+(defn get-data [^TileEntity entity entity-atom]
+  (let [data-key [(.-xCoord entity) (.-yCoord entity) (.-zCoord entity)]]
+    (get @entity-atom data-key)))
+
+(defn swap-data! [^TileEntity entity entity-atom new-data]
+  (let [data-key [(.-xCoord entity) (.-yCoord entity) (.-zCoord entity)]]
+    (swap! entity-atom assoc data-key new-data)))
+
+(def byte-array-type (type (byte-array [])))
+(def int-array-type (type (int-array [])))
+
+(defn handle-colls [k v ^NBTTagCompound nbt]
+  (if (or (empty? v) (= (type (first v)) java.lang.Long) (= (type (first v)) java.lang.Integer))
+    (.setIntArray nbt k (int-array v))
+    (.setString nbt k (str v))))
+
+(defn keyword->string [k]
+  (let [string (str k)
+        string (apply str (rest string))]
+    string))
+
+(defn add-to-tag [k v ^NBTTagCompound nbt]
+  (if (instance? NBTBase v)
+    (.setTag nbt k v)
+    (condp = (type v)
+      java.lang.Byte (.setByte nbt k v)
+      java.lang.Short (.setShort nbt k v)
+      java.lang.Integer (.setInteger nbt k v)
+      java.lang.Long (.setLong nbt k v)
+      java.lang.Float (.setFloat nbt k v)
+      java.lang.Double (.setDouble nbt k v)
+      java.lang.String (.setString nbt k v)
+      byte-array-type (.setByteArray nbt k v)
+      int-array-type (.setIntArray nbt k v)
+      clojure.lang.PersistentVector (handle-colls k v nbt)
+      clojure.lang.PersistentList (handle-colls k v nbt)
+      (.setString nbt k (str v))))
+  nbt)
+
+(defn map->nbt [nbt-map ^NBTTagCompound nbt]
+  (reduce #(add-to-tag (keyword->string (key %2)) (val %2) %1) nbt nbt-map))
+
+(defn write-tag-data! [^TileEntity entity ^NBTTagCompound nbt entity-atom]
+  (let [nbt-map (get-data entity entity-atom)]
+    (map->nbt nbt-map nbt)))
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class

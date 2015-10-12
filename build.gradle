@@ -56,7 +56,6 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
 	shade 'org.clojure:clojure:1.7.0'
-
 }
 
 jar {
