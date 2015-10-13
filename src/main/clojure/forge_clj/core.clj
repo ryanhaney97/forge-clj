@@ -13,9 +13,13 @@
    [net.minecraft.nbt NBTBase NBTTagCompound NBTTagByte NBTTagShort NBTTagInt NBTTagLong NBTTagFloat NBTTagDouble NBTTagByteArray NBTTagIntArray NBTTagString NBTTagList]
    [net.minecraft.tileentity TileEntity]
    [net.minecraftforge.common.util EnumHelper]
+   [cpw.mods.fml.relauncher Side]
    [cpw.mods.fml.common.registry GameRegistry]
    [cpw.mods.fml.common IWorldGenerator Mod Mod$EventHandler FMLCommonHandler]
-   [cpw.mods.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
+   [cpw.mods.fml.common.network ByteBufUtils NetworkRegistry]
+   [cpw.mods.fml.common.network.simpleimpl IMessage IMessageHandler SimpleNetworkWrapper]
+   [cpw.mods.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]
+   [io.netty.buffer ByteBuf]))
 
 ;Declares a final global symbol, that will be set later on as true if client or false if dedicated server.
 (declare client?)
@@ -383,6 +387,62 @@
 (defn write-tag-data! [^TileEntity entity ^NBTTagCompound nbt entity-atom]
   (let [nbt-map (get-data entity entity-atom)]
     (map->nbt nbt-map nbt)))
+
+(gen-class
+ :name forge_clj.core.NBTPacket
+ :prefix "nbt-packet-"
+ :state nbt
+ :init init
+ :constructors {[clojure.lang.PersistentArrayMap] []
+                [] []}
+ :implements [cpw.mods.fml.common.network.simpleimpl.IMessage])
+
+(defn nbt-packet-init
+  ([]
+   [[] (atom {})])
+  ([nbt-map]
+   [[] (atom nbt-map)]))
+
+(defn nbt-packet-fromBytes [^forge_clj.core.NBTPacket this ^ByteBuf buf]
+  (let [nbt-data (ByteBufUtils/readTag buf)
+        converted-data (nbt->map nbt-data)]
+    (reset! (.nbt this) converted-data)))
+
+(defn nbt-packet-toBytes [^forge_clj.core.NBTPacket this ^ByteBuf buf]
+  (let [converted-data @(.nbt this)
+        nbt-data (map->nbt converted-data (NBTTagCompound.))]
+    (ByteBufUtils/writeTag buf nbt-data)))
+
+(defmacro gen-packet-handler [name-ns handler-name on-message]
+  (let [fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname handler-name)))
+        prefix (str handler-name "-")]
+    `(do
+       (gen-class
+        :name ~fullname
+        :prefix ~prefix
+        :implements [cpw.mods.fml.common.network.simpleimpl.IMessageHandler])
+       (defn ~(symbol (str prefix "onMessage")) [~'this ~'message ~'context]
+         (~on-message (deref (.nbt ~'message)) ~'context))
+       (def ~handler-name ~fullname))))
+
+(defn create-network [network-name]
+  (.newSimpleChannel NetworkRegistry/INSTANCE network-name))
+
+(defn register-message [^SimpleNetworkWrapper network ^Class handler ^Integer id side]
+  (let [^Side network-side (if (= side :client)
+                             Side/CLIENT
+                             (if (= side :server)
+                               Side/SERVER
+                               side))]
+    (.registerMessage network handler forge_clj.core.NBTPacket id network-side)))
+
+(defn send-to [^SimpleNetworkWrapper network nbt-map target]
+  (let [packet (forge_clj.core.NBTPacket. nbt-map)]
+    (.sendTo network packet target)))
+
+(defn send-to-server [^SimpleNetworkWrapper network nbt-map]
+  (let [packet (forge_clj.core.NBTPacket. nbt-map)]
+    (.sendToServer network packet)))
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class
