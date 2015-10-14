@@ -13,12 +13,14 @@
    [net.minecraft.nbt NBTBase NBTTagCompound NBTTagByte NBTTagShort NBTTagInt NBTTagLong NBTTagFloat NBTTagDouble NBTTagByteArray NBTTagIntArray NBTTagString NBTTagList]
    [net.minecraft.tileentity TileEntity]
    [net.minecraftforge.common.util EnumHelper]
+   [net.minecraftforge.common MinecraftForge]
    [cpw.mods.fml.relauncher Side]
    [cpw.mods.fml.common.registry GameRegistry]
    [cpw.mods.fml.common IWorldGenerator Mod Mod$EventHandler FMLCommonHandler]
    [cpw.mods.fml.common.network ByteBufUtils NetworkRegistry]
    [cpw.mods.fml.common.network.simpleimpl IMessage IMessageHandler SimpleNetworkWrapper]
    [cpw.mods.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]
+   [cpw.mods.fml.common.eventhandler SubscribeEvent]
    [io.netty.buffer ByteBuf]))
 
 ;Declares a final global symbol, that will be set later on as true if client or false if dedicated server.
@@ -443,6 +445,31 @@
 (defn send-to-server [^SimpleNetworkWrapper network nbt-map]
   (let [packet (forge_clj.core.NBTPacket. nbt-map)]
     (.sendToServer network packet)))
+
+(defn gen-event-signiture [map-entry]
+  (let [method-name (symbol (apply str (rest (str (key map-entry)))))
+        event-map (val map-entry)
+        event (:event event-map)
+        priority (:priority event-map)]
+    `[~(with-meta method-name `{SubscribeEvent ~(if priority
+                                                  `[~priority]
+                                                  `[])}) [~event] ~'void]))
+
+(defmacro gen-events [name-ns handler-name & args]
+  (let [fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname handler-name)))
+        events (apply hash-map args)
+        signitures (mapv gen-event-signiture events)
+        prefix (str handler-name "-")]
+    `(do
+       (gen-class
+        :name ~fullname
+        :prefix ~prefix
+        :methods ~signitures)
+       (def ~handler-name (new ~fullname)))))
+
+(defn register-events [handler]
+  (.register (.bus (FMLCommonHandler/instance)) handler)
+  (.register MinecraftForge/EVENT_BUS handler))
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class
