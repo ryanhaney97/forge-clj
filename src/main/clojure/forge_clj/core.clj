@@ -12,8 +12,9 @@
    [net.minecraft.world World]
    [net.minecraft.nbt NBTBase NBTTagCompound NBTTagByte NBTTagShort NBTTagInt NBTTagLong NBTTagFloat NBTTagDouble NBTTagByteArray NBTTagIntArray NBTTagString NBTTagList]
    [net.minecraft.tileentity TileEntity]
+   [net.minecraft.entity Entity]
    [net.minecraftforge.common.util EnumHelper]
-   [net.minecraftforge.common MinecraftForge]
+   [net.minecraftforge.common MinecraftForge IExtendedEntityProperties]
    [cpw.mods.fml.relauncher Side]
    [cpw.mods.fml.common.registry GameRegistry]
    [cpw.mods.fml.common IWorldGenerator Mod Mod$EventHandler FMLCommonHandler]
@@ -34,6 +35,10 @@
    (itemstack item amount 0))
   ([item amount metadata]
    (ItemStack. item amount metadata)))
+
+;Convenient .isRemote check function. Looks cleaner.
+(defn remote? [^World world]
+  (.isRemote world))
 
 ;Given a key word, returns a setter java method as a symbol by adding set as a prefix,
 ;and capitalizing the remaining words.
@@ -115,24 +120,30 @@
 
 ;General purpose macro used to extend objects.
 ;Similar to defobj at first glance, except that this generates an actual class instead of an anonymous instance.
-(defmacro defclass [superclass name-ns class-name classdata]
-  (let [super-methods (:expose classdata)
-        interfaces (:interfaces classdata)
-        prefix (str class-name "-")
-        fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))]
-    `(do
-       (gen-class
-        :name ~fullname
-        :prefix ~prefix
-        :extends ~superclass
-        :exposes-methods ~super-methods
-        :implements ~interfaces)
-       (def ~class-name ~fullname))))
-
-;Creates a Tile Entity class.
-(defmacro deftileentity [name-ns class-name & args]
-  (let [classdata (apply hash-map args)]
-    `(defclass TileEntity ~name-ns ~class-name ~classdata)))
+(defmacro defclass
+  ([superclass name-ns class-name classdata]
+   (let [super-methods (:expose classdata)
+         interfaces (:interfaces classdata)
+         prefix (str class-name "-")
+         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))]
+     `(do
+        (gen-class
+         :name ~fullname
+         :prefix ~prefix
+         :extends ~superclass
+         :exposes-methods ~super-methods
+         :implements ~interfaces)
+        (def ~class-name ~fullname))))
+  ([name-ns class-name classdata]
+   (let [interfaces (:interfaces classdata)
+         prefix (str class-name "-")
+         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))]
+     `(do
+        (gen-class
+         :name ~fullname
+         :prefix ~prefix
+         :implements ~interfaces)
+        (def ~class-name ~fullname)))))
 
 ;Given the name of a block, and a series of keywords and values representing the properties of the block,
 ;generates a Block object with the specified properties. Methods can be overriden using the :override keyword.
@@ -234,10 +245,10 @@
 ;Given a generator, world, Random object (must be an object!), a chunk x value, a chunk z value,
 ;the number of chances to spawn, and the heights, runs the respective generator at random locations in the chunk,
 ;according to the Random object.
-(defmacro run-default-generator [^WorldGenerator generator ^World world ^Random rand-obj chunk-x chunk-z chances height1 height2]
+(defmacro run-default-generator [^WorldGenerator generator ^World world ^java.util.Random rand-obj ^Integer chunk-x ^Integer chunk-z chances ^Integer height1 ^Integer height2]
   `(loop [~'chance ~chances]
      (when (< 0 ~'chance)
-       (.generate ~generator ~world ~rand-obj (+ (* 16 ~chunk-x) (.nextInt ~rand-obj 16)) (+ ~height1 (.nextInt ~rand-obj (abs (- ~height1 ~height2)))) (+ (* 16 ~chunk-z) (.nextInt ~rand-obj 16)))
+       (.generate ~generator ~world ~rand-obj (+ (* 16 ~chunk-x) (~'.nextInt ~(with-meta rand-obj {:tag 'java.util.Random}) 16)) (+ ~height1 (~'.nextInt ~(with-meta rand-obj {:tag 'java.util.Random}) (abs (- ~height1 ~height2)))) (+ (* 16 ~chunk-z) (~'.nextInt ~(with-meta rand-obj {:tag 'java.util.Random}) 16)))
        (recur (dec ~'chance)))))
 
 ;Given a name and a series of dimension-generator pairs, creates a generator that runs the correct generatior function.
@@ -306,6 +317,13 @@
 (defn register-tile-entity [entity id]
   (GameRegistry/registerTileEntity entity id))
 
+(defn register-events [handler]
+  (.register (.bus (FMLCommonHandler/instance)) handler)
+  (.register MinecraftForge/EVENT_BUS handler))
+
+(defn register-extended-properties [^Entity entity ^String id ^IExtendedEntityProperties properties]
+  (.registerExtendedProperties entity id properties))
+
 (defn string-tag-handler [s]
   (condp = s
     "true" true
@@ -338,19 +356,6 @@
         nbt-pairs (mapv (partial nbt-key-val-pair nbt) nbt-keys)
         nbt-map (into {} nbt-pairs)]
     nbt-map))
-
-(defn read-tag-data! [^NBTTagCompound nbt entity-atom]
-  (let [data (nbt->map nbt)
-        data-key [(:x data) (:y data) (:z data)]]
-    (swap! entity-atom assoc data-key data)))
-
-(defn get-data [^TileEntity entity entity-atom]
-  (let [data-key [(.-xCoord entity) (.-yCoord entity) (.-zCoord entity)]]
-    (get @entity-atom data-key)))
-
-(defn swap-data! [^TileEntity entity entity-atom new-data]
-  (let [data-key [(.-xCoord entity) (.-yCoord entity) (.-zCoord entity)]]
-    (swap! entity-atom assoc data-key new-data)))
 
 (def byte-array-type (type (byte-array [])))
 (def int-array-type (type (int-array [])))
@@ -386,9 +391,111 @@
 (defn map->nbt [nbt-map ^NBTTagCompound nbt]
   (reduce #(add-to-tag (keyword->string (key %2)) (val %2) %1) nbt nbt-map))
 
-(defn write-tag-data! [^TileEntity entity ^NBTTagCompound nbt entity-atom]
-  (let [nbt-map (get-data entity entity-atom)]
+(defn read-tag-data! [entity-atom ^NBTTagCompound nbt]
+  (let [data (nbt->map nbt)
+        fields @entity-atom
+        field-keys (keys fields)
+        data (select-keys data field-keys)
+        per-field (fn [entity-data field-key]
+                    (if (not (contains? entity-data field-key))
+                      (assoc entity-data field-key (get fields field-key))
+                      entity-data))
+        data (reduce per-field data field-keys)]
+    (reset! entity-atom data)))
+
+(defn write-tag-data! [entity-atom ^NBTTagCompound nbt]
+  (let [nbt-map (deref entity-atom)]
     (map->nbt nbt-map nbt)))
+
+(defmacro defassocclass
+  ([superclass name-ns class-name classdata]
+   (let [super-methods (:expose classdata)
+         interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
+         fields (:fields classdata)
+         prefix (str class-name "-")
+         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))
+         this-sym (with-meta 'this {:tag fullname})]
+     `(do
+        (gen-class
+         :name ~fullname
+         :prefix ~prefix
+         :extends ~superclass
+         :exposes-methods ~super-methods
+         :state ~'data
+         :init ~'initialize
+         :implements ~interfaces)
+        (def ~class-name ~fullname)
+
+        (defn ~(symbol (str prefix "initialize")) []
+          [[] (atom ~fields)])
+        (defn ~(symbol (str prefix "assoc")) [~'this ~'obj-key ~'obj-val]
+          (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
+          ~'this)
+        (defn ~(symbol (str prefix "conj")) [~'this ~'obj]
+          (swap! (~'.-data ~this-sym) conj ~'obj)
+          ~'this)
+        (defn ~(symbol (str prefix "persistent")) [~'this]
+          (deref (~'.-data ~this-sym)))
+        (defn ~(symbol (str prefix "conj")) [~'this ~'obj]
+          (swap! (~'.-data ~this-sym) conj ~'obj))
+        (defn ~(symbol (str prefix "valAt"))
+          ([~'this ~'obj]
+           (get (deref (~'.-data ~this-sym)) ~'obj))
+          ([~'this ~'obj ~'notfound]
+           (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound))))))
+  ([name-ns class-name classdata]
+   (let [interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
+         fields (get classdata :fields {})
+         prefix (str class-name "-")
+         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))
+         this-sym (with-meta 'this {:tag fullname})]
+     `(do
+        (do
+          (gen-class
+           :name ~fullname
+           :prefix ~prefix
+           :state ~'data
+           :init ~'initialize
+           :implements ~interfaces)
+          (def ~class-name ~fullname)
+
+          (defn ~(symbol (str prefix "initialize")) []
+            [[] (atom ~fields)])
+          (defn ~(symbol (str prefix "assoc")) [~'this ~'obj-key ~'obj-val]
+            (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
+            ~'this)
+          (defn ~(symbol (str prefix "conj")) [~'this ~'obj]
+            (swap! (~'.-data ~this-sym) conj ~'obj)
+            ~'this)
+          (defn ~(symbol (str prefix "persistent")) [~'this]
+            (deref (~'.-data ~this-sym)))
+          (defn ~(symbol (str prefix "conj")) [~'this ~'obj]
+            (swap! (~'.-data ~this-sym) conj ~'obj))
+          (defn ~(symbol (str prefix "valAt"))
+            ([~'this ~'obj]
+             (get (deref (~'.-data ~this-sym)) ~'obj))
+            ([~'this ~'obj ~'notfound]
+             (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound))))))))
+
+;Creates a Tile Entity class.
+(defmacro deftileentity [name-ns class-name & args]
+  (let [classdata (apply hash-map args)
+        prefix (str class-name "-")
+        classdata (assoc-in classdata [:expose 'readFromNBT] 'superReadFromNBT)
+        classdata (assoc-in classdata [:expose 'writeToNBT] 'superWriteToNBT)
+        fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))
+        this-sym (with-meta 'this {:tag fullname})]
+    `(do
+       (defassocclass TileEntity ~name-ns ~class-name ~classdata)
+       (defn ~(symbol (str prefix "readFromNBT")) [~'this ~'compound]
+         (~'.superReadFromNBT ~this-sym ~'compound)
+         (read-tag-data! (~'.-data ~this-sym) ~'compound))
+       (defn ~(symbol (str prefix "writeToNBT")) [~'this ~'compound]
+         (~'.superWriteToNBT ~this-sym ~'compound)
+         (write-tag-data! (~'.-data ~this-sym) ~'compound)))))
+
+(defn get-tile-entity-at [^World world ^Integer x ^Integer y ^Integer z]
+  (.getTileEntity world x y z))
 
 (gen-class
  :name forge_clj.core.NBTPacket
@@ -408,10 +515,10 @@
 (defn nbt-packet-fromBytes [^forge_clj.core.NBTPacket this ^ByteBuf buf]
   (let [nbt-data (ByteBufUtils/readTag buf)
         converted-data (nbt->map nbt-data)]
-    (reset! (.nbt this) converted-data)))
+    (reset! (.-nbt this) converted-data)))
 
 (defn nbt-packet-toBytes [^forge_clj.core.NBTPacket this ^ByteBuf buf]
-  (let [converted-data @(.nbt this)
+  (let [converted-data (deref (.-nbt this))
         nbt-data (map->nbt converted-data (NBTTagCompound.))]
     (ByteBufUtils/writeTag buf nbt-data)))
 
@@ -424,7 +531,7 @@
         :prefix ~prefix
         :implements [cpw.mods.fml.common.network.simpleimpl.IMessageHandler])
        (defn ~(symbol (str prefix "onMessage")) [~'this ~'message ~'context]
-         (~on-message (deref (.nbt ~'message)) ~'context))
+         (~on-message (deref (.-nbt ~(with-meta 'message {:tag 'forge_clj.core.NBTPacket}))) ~'context))
        (def ~handler-name ~fullname))))
 
 (defn create-network [network-name]
@@ -467,9 +574,23 @@
         :methods ~signitures)
        (def ~handler-name (new ~fullname)))))
 
-(defn register-events [handler]
-  (.register (.bus (FMLCommonHandler/instance)) handler)
-  (.register MinecraftForge/EVENT_BUS handler))
+(defmacro defextendedproperties [name-ns class-name & args]
+  (let [classdata (apply hash-map args)
+        classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `IExtendedEntityProperties))
+        prefix (str class-name "-")
+        fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))
+        this-sym (with-meta 'this {:tag fullname})]
+    `(do
+       (defassocclass ~name-ns ~class-name ~classdata)
+       (defn ~(symbol (str prefix "loadNBTData")) [~'this ~'compound]
+         (read-tag-data! (~'.-data ~this-sym) ~'compound))
+       (defn ~(symbol (str prefix "saveNBTData")) [~'this ~'compound]
+         (write-tag-data! (~'.-data ~this-sym) ~'compound))
+       (defn ~(symbol (str prefix "init")) [~'this ~'entity ~'world]
+         nil))))
+
+(defn get-extended-properties [^Entity entity ^String id]
+  (.getExtendedProperties entity id))
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class

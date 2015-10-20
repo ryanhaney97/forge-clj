@@ -14,7 +14,7 @@ buildscript {
     }
     dependencies {
 	classpath 'clojuresque:clojuresque:1.7.0'
-        classpath 'net.minecraftforge.gradle:ForgeGradle:1.2-SNAPSHOT'
+	classpath 'net.minecraftforge.gradle:ForgeGradle:1.2-SNAPSHOT'
     }
 }
 
