@@ -314,16 +314,20 @@
 (defmethod register [1 IWorldGenerator] [generator mod-priority]
   (GameRegistry/registerWorldGenerator generator mod-priority))
 
+;Registers a Tile Entity.
 (defn register-tile-entity [entity id]
   (GameRegistry/registerTileEntity entity id))
 
+;Registers an Event Handler.
 (defn register-events [handler]
   (.register (.bus (FMLCommonHandler/instance)) handler)
   (.register MinecraftForge/EVENT_BUS handler))
 
+;Registers Extended Properties.
 (defn register-extended-properties [^Entity entity ^String id ^IExtendedEntityProperties properties]
   (.registerExtendedProperties entity id properties))
 
+;Handles certain types of strings to handle true, false, and nil values.
 (defn string-tag-handler [s]
   (condp = s
     "true" true
@@ -331,6 +335,8 @@
     "nil" nil
     s))
 
+;Takes an NBTTagCompound and a key. Gets the tag associated with the key,
+;and creates the raw value based on its type. If type cannot be resolved, simply returns the tag object.
 (defn nbt-key-val-pair [^NBTTagCompound nbt k]
   (let [tag (.getTag nbt k)
         value (condp instance? tag
@@ -347,6 +353,7 @@
                 tag)]
     [(keyword k) value]))
 
+;Converts an NBTTagCompound into a Clojure hash map.
 (defn nbt->map [^NBTTagCompound nbt]
   (let [nbt-json (str nbt)
         removed-braces (apply str (butlast (rest nbt-json)))
@@ -357,19 +364,24 @@
         nbt-map (into {} nbt-pairs)]
     nbt-map))
 
+;The types for byte and int arrays.
 (def byte-array-type (type (byte-array [])))
 (def int-array-type (type (int-array [])))
 
+;Handles collections, creating int arrays when possible, and converting it into a string when not possible.
 (defn handle-colls [k v ^NBTTagCompound nbt]
   (if (or (empty? v) (= (type (first v)) java.lang.Long) (= (type (first v)) java.lang.Integer))
     (.setIntArray nbt k (int-array v))
     (.setString nbt k (str v))))
 
+;Converts a keyword into a string.
 (defn keyword->string [k]
   (let [string (str k)
         string (apply str (rest string))]
     string))
 
+;Adds the value at the respective key in the nbt tag based on type. If type cannot be resolved, converts to String
+;and uses that instead. Unresolvable values should use the load-string function to re-evaluate them or similar.
 (defn add-to-tag [k v ^NBTTagCompound nbt]
   (if (instance? NBTBase v)
     (.setTag nbt k v)
@@ -388,9 +400,12 @@
       (.setString nbt k (str v))))
   nbt)
 
+;Stores a Clojure hash-map in an nbt-tag. Might be somewhat lossy if an unsupported type is stored.
 (defn map->nbt [nbt-map ^NBTTagCompound nbt]
   (reduce #(add-to-tag (keyword->string (key %2)) (val %2) %1) nbt nbt-map))
 
+;Given an atom and a NBTTagCompound, converts the compound into a hash-map, filters out irrelevent fields, and
+;replaces the atom with the read data.
 (defn read-tag-data! [entity-atom ^NBTTagCompound nbt]
   (let [data (nbt->map nbt)
         fields @entity-atom
@@ -403,10 +418,14 @@
         data (reduce per-field data field-keys)]
     (reset! entity-atom data)))
 
+;Given an atom and a NBTTagCompound, stores the contents of the atom in an nbt tag.
 (defn write-tag-data! [entity-atom ^NBTTagCompound nbt]
   (let [nbt-map (deref entity-atom)]
     (map->nbt nbt-map nbt)))
 
+;Creates class similarly to defclass. However, it implements the ITransientAssociative interface, allowing its data
+;to be stored and retrieved like a hash-map. When assoc-ing one of these classes, use assoc! instead of assoc, since
+;this changes state.
 (defmacro defassocclass
   ([superclass name-ns class-name classdata]
    (let [super-methods (:expose classdata)
@@ -494,9 +513,12 @@
          (~'.superWriteToNBT ~this-sym ~'compound)
          (write-tag-data! (~'.-data ~this-sym) ~'compound)))))
 
+;Gets the tile entity in the world at the specified coordinates. For convenience.
 (defn get-tile-entity-at [^World world ^Integer x ^Integer y ^Integer z]
   (.getTileEntity world x y z))
 
+;Generates a class for forge-clj itself that serves as the default packet used by its networking functions.
+;Stores and retrieves data via the nbt and hash-map converter used earlier.
 (gen-class
  :name forge_clj.core.NBTPacket
  :prefix "nbt-packet-"
@@ -522,6 +544,7 @@
         nbt-data (map->nbt converted-data (NBTTagCompound.))]
     (ByteBufUtils/writeTag buf nbt-data)))
 
+;Creates a packet handler given the namespace, handler name, and the function to call upon receiving a message.
 (defmacro gen-packet-handler [name-ns handler-name on-message]
   (let [fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname handler-name)))
         prefix (str handler-name "-")]
@@ -534,9 +557,11 @@
          (~on-message (deref (.-nbt ~(with-meta 'message {:tag 'forge_clj.core.NBTPacket}))) ~'context))
        (def ~handler-name ~fullname))))
 
+;Creates a network given the network name.
 (defn create-network [network-name]
   (.newSimpleChannel NetworkRegistry/INSTANCE network-name))
 
+;Registers a network message given a network, a packet handler, an id, and a side.
 (defn register-message [^SimpleNetworkWrapper network ^Class handler ^Integer id side]
   (let [^Side network-side (if (= side :client)
                              Side/CLIENT
@@ -545,14 +570,17 @@
                                side))]
     (.registerMessage network handler forge_clj.core.NBTPacket id network-side)))
 
+;Sends a message along the specified wrapper. Message is in the form of a map, and requires a target to send to.
 (defn send-to [^SimpleNetworkWrapper network nbt-map target]
   (let [packet (forge_clj.core.NBTPacket. nbt-map)]
     (.sendTo network packet target)))
 
+;Sends a message from the client to the server along the specified wrapper. Message is in the form of a map.
 (defn send-to-server [^SimpleNetworkWrapper network nbt-map]
   (let [packet (forge_clj.core.NBTPacket. nbt-map)]
     (.sendToServer network packet)))
 
+;Creates a method signiture for the given map entry containing things pertaining to events.
 (defn gen-event-signiture [map-entry]
   (let [method-name (symbol (apply str (rest (str (key map-entry)))))
         event-map (val map-entry)
@@ -562,6 +590,8 @@
                                                   `[~priority]
                                                   `[])}) [~event] ~'void]))
 
+;Creates an event handler given the namespace, handler name, and a series of arguments representing the events
+;to be handled.
 (defmacro gen-events [name-ns handler-name & args]
   (let [fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname handler-name)))
         events (apply hash-map args)
@@ -574,6 +604,7 @@
         :methods ~signitures)
        (def ~handler-name (new ~fullname)))))
 
+;Creates a class used to store extended properties.
 (defmacro defextendedproperties [name-ns class-name & args]
   (let [classdata (apply hash-map args)
         classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `IExtendedEntityProperties))
@@ -589,6 +620,7 @@
        (defn ~(symbol (str prefix "init")) [~'this ~'entity ~'world]
          nil))))
 
+;Obtains the extended properties from an entity with the specified id.
 (defn get-extended-properties [^Entity entity ^String id]
   (.getExtendedProperties entity id))
 
