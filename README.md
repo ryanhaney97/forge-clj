@@ -20,6 +20,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 
 ##Downloads
 
+- Version 0.3.0: [forge-clj](http://bit.ly/1OJ2P3H "forge-clj Version 0.3.0") [forge-clj devkit](http://bit.ly/1MTJhbc "forge-clj devkit Version 0.3.0")
+
 - Version 0.2.2: [forge-clj](http://bit.ly/1NCq8vM "forge-clj Version 0.2.2") [forge-clj devkit](http://bit.ly/1jsIHFC "forge-clj devkit Version 0.2.2")
 
 - Version 0.2.1: [forge-clj](http://bit.ly/1WOmksN "forge-clj Version 0.2.1") [forge-clj devkit](http://bit.ly/1LmEj1n "forge-clj devkit Version 0.2.1")
@@ -27,6 +29,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 - Version 0.2.0: [forge-clj](http://bit.ly/1FTJ5HO "forge-clj Version 0.2.0") [forge-clj devkit](http://bit.ly/1jOENra "forge-clj devkit Version 0.2.0")
 
 ##Changelog
+
+- Version 0.3.0: Added a multitude of systems. First off, the Tile Entity system was revamped, and the data is now stored inside an atom within the class instance rather than a global atom. This new class also supports hash-map-like syntax for getting and setting values. Next, I added the ability to create custom packets. The system takes data as a map, converts it to nbt, and sends it using the network system implemented. I then added the ability to create an event handler. You specify the name as a keyword, and the event Class itself in the :event tag. Finally, I added the ability to add custom entity properties, using a similar system to that of the Tile Entities.
 
 - Version 0.2.2: This update focuses on Tile Entities and NBT data. First, you now have the ability to create Tile Entities. Note that for Tile Entities, a CLASS is generated, rather than an instance like normal, so it'll be a bit different to work with. Next, I added the ability to convert Minecraft's NBT data into a Clojure map and back. Finally, I added a system that will automatically store this converted nbt data in an atom of your choice, using a unique key underneath in order to separate the instances.
 
