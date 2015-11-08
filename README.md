@@ -20,6 +20,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 
 ##Downloads
 
+- Version 0.4.0: [forge-clj](http://bit.ly/1GREpCN "forge-clj Version 0.4.0") [forge-clj devkit](http://bit.ly/1GREqXl "forge-clj devkit Version 0.4.0")
+
 - Version 0.3.0: [forge-clj](http://bit.ly/1OJ2P3H "forge-clj Version 0.3.0") [forge-clj devkit](http://bit.ly/1MTJhbc "forge-clj devkit Version 0.3.0")
 
 - Version 0.2.2: [forge-clj](http://bit.ly/1NCq8vM "forge-clj Version 0.2.2") [forge-clj devkit](http://bit.ly/1jsIHFC "forge-clj devkit Version 0.2.2")
@@ -29,6 +31,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 - Version 0.2.0: [forge-clj](http://bit.ly/1FTJ5HO "forge-clj Version 0.2.0") [forge-clj devkit](http://bit.ly/1jOENra "forge-clj devkit Version 0.2.0")
 
 ##Changelog
+
+- Version 0.4.0: Added a very large system for rendering models. Currently only works for tile entities, and techne isn't supported (yet). Also added a few more minor things, such as the ability to create your own creative tab. Finally, I entirely revamped the organization of the mod, by splitting it into parts. Both forge-clj and test-mod are far easier to read now that everything isn't just in a single file. As a sidenote, as of this version I've started to use a custom program to help me auto-distribute each new version. Hopefully this means that new versions will be coming out faster than normal, since it won't be as much work for me.
 
 - Version 0.3.0: Added a multitude of systems. First off, the Tile Entity system was revamped, and the data is now stored inside an atom within the class instance rather than a global atom. This new class also supports hash-map-like syntax for getting and setting values. Next, I added the ability to create custom packets. The system takes data as a map, converts it to nbt, and sends it using the network system implemented. I then added the ability to create an event handler. You specify the name as a keyword, and the event Class itself in the :event tag. Finally, I added the ability to add custom entity properties, using a similar system to that of the Tile Entities.
 
