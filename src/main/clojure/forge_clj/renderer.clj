@@ -33,20 +33,29 @@
 
 (def memo-model-renderer (memoize model-renderer))
 
-(defn render-renderer [^ModelRenderer renderer f]
-  (.render renderer f))
+(defn render-renderer [^ModelRenderer renderer f opacity]
+  (if opacity
+    (do
+      (GL11/glEnable GL11/GL_BLEND)
+      (GL11/glBlendFunc GL11/GL_SRC_ALPHA GL11/GL_ONE_MINUS_SRC_ALPHA)
+      (GL11/glColor4f (float 1.0) (float 1.0) (float 1.0) (float opacity))
+      (.render renderer f)
+      (GL11/glDisable GL11/GL_BLEND))
+    (.render renderer f)))
 
 (defn render-tile-entity [^ModelBase model-base update-fn ^TileEntity tile-entity f f1 f2 f3 f4 f5 memo? memo-test?]
   (.render model-base nil f f1 f2 f3 f4 f5)
-  (doall (map #(render-renderer %1 f5) (map #(if memo?
-                                               (memo-model-renderer model-base %1 memo-test?)
-                                               (model-renderer model-base %1 false)) (vals (update-fn tile-entity))))))
+  (let [render-data (vals (update-fn tile-entity))]
+    (doall (map #(render-renderer %1 f5 %2) (map #(if memo?
+                                                    (memo-model-renderer model-base %1 memo-test?)
+                                                    (model-renderer model-base %1 false)) render-data) (map :opacity render-data)))))
 
 (defn render-entity [^ModelBase model-base update-fn ^Entity entity f f1 f2 f3 f4 f5 memo? memo-test?]
   (.render model-base entity f f1 f2 f3 f4 f5)
-  (doall (map #(render-renderer %1 f5) (map #(if memo?
-                                               (memo-model-renderer model-base %1 memo-test?)
-                                               (model-renderer model-base %1 false)) (vals (update-fn entity))))))
+  (let [render-data (vals (update-fn entity))]
+    (doall (map #(render-renderer %1 f5 %2) (map #(if memo?
+                                                    (memo-model-renderer model-base %1 memo-test?)
+                                                    (model-renderer model-base %1 false)) render-data) (map :opacity render-data)))))
 
 (defn resource-location [location]
   (ResourceLocation. (str location)))
@@ -68,7 +77,6 @@
                                  ~(if texture
                                     `(bind-texture ~texture)
                                     `(GL11/glDisable GL11/GL_TEXTURE_2D))
-                                 (GL11/glColor3f (float (get ~color :r 1)) (float (get ~color :g 1)) (float (get ~color :b 1)))
                                  (render-tile-entity ~(symbol (str renderer-name "-model-obj")) ~update-model ~'entity 0 0 0 0 0 0.0625 ~memo? ~memo-test?)
                                  ~(if (not texture)
                                     `(GL11/glEnable GL11/GL_TEXTURE_2D))
