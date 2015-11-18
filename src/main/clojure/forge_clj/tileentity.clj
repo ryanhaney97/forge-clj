@@ -29,8 +29,8 @@
          (~on-load ~this-sym))
        (defn ~(symbol (str prefix "writeToNBT")) [~'this ~'compound]
          (~'.superWriteToNBT ~this-sym ~'compound)
-         (write-tag-data! (~'.-data ~this-sym) ~'compound)
-         (~on-save ~this-sym))
+         (~on-save ~this-sym)
+         (write-tag-data! (~'.-data ~this-sym) ~'compound))
        (defn ~(symbol (str prefix "getDescriptionPacket")) [~'this]
          (S35PacketUpdateTileEntity. (.-xCoord ~this-sym) (.-yCoord ~this-sym) (.-zCoord ~this-sym) 1 (map->nbt (select-keys (deref (~'.-data ~this-sym)) ~sync-data) (NBTTagCompound.))))
        (defn ~(symbol (str prefix "onDataPacket")) [~'this ~'network-manager ~(with-meta 'packet `{:tag S35PacketUpdateTileEntity})]

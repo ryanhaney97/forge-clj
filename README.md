@@ -20,6 +20,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 
 ##Downloads
 
+- Version 0.4.1: [forge-clj](http://bit.ly/1WZdeNA "forge-clj Version 0.4.1") [forge-clj devkit](http://bit.ly/1YgDtfB "forge-clj devkit Version 0.4.1")
+
 - Version 0.4.0: [forge-clj](http://bit.ly/1GREpCN "forge-clj Version 0.4.0") [forge-clj devkit](http://bit.ly/1GREqXl "forge-clj devkit Version 0.4.0")
 
 - Version 0.3.0: [forge-clj](http://bit.ly/1OJ2P3H "forge-clj Version 0.3.0") [forge-clj devkit](http://bit.ly/1MTJhbc "forge-clj devkit Version 0.3.0")
@@ -31,6 +33,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 - Version 0.2.0: [forge-clj](http://bit.ly/1FTJ5HO "forge-clj Version 0.2.0") [forge-clj devkit](http://bit.ly/1jOENra "forge-clj devkit Version 0.2.0")
 
 ##Changelog
+
+- Version 0.4.1: Made it so that forge-clj works on dedicated servers now. Make sure that your client namespace is not required in your core, and you use the full namespace name when specifying it now. It'll auto-require the client ns if this is on the integrated client. Also did some things to the NBT system, fixing special strings such as "nil", and adding support for maps, vectors, lists, and itemstacks.
 
 - Version 0.4.0: Added a very large system for rendering models. Currently only works for tile entities, and techne isn't supported (yet). Also added a few more minor things, such as the ability to create your own creative tab. Finally, I entirely revamped the organization of the mod, by splitting it into parts. Both forge-clj and test-mod are far easier to read now that everything isn't just in a single file. As a sidenote, as of this version I've started to use a custom program to help me auto-distribute each new version. Hopefully this means that new versions will be coming out faster than normal, since it won't be as much work for me.
 

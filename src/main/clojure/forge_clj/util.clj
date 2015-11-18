@@ -8,6 +8,10 @@
    [net.minecraft.block Block]
    [net.minecraft.item Item ItemStack]
    [net.minecraft.creativetab CreativeTabs]
+   [net.minecraft.entity.player EntityPlayer]
+   [net.minecraft.entity.item EntityItem]
+   [net.minecraft.util ChatComponentText]
+   [net.minecraft.inventory IInventory]
    [net.minecraft.world World]
    [cpw.mods.fml.common.registry GameRegistry]))
 
@@ -67,3 +71,25 @@
      (get-block (first split-id) (second split-id))))
   ([modid block-name]
    (GameRegistry/findBlock (str modid) (str block-name))))
+
+(defn printchat [^EntityPlayer player s]
+  (.addChatComponentMessage player (ChatComponentText. (str s))))
+
+(defn drop-items [^World world x y z]
+  (let [tile-entity (.getTileEntity world (int x) (int y) (int z))]
+    (if (instance? IInventory tile-entity)
+      (let [tile-entity ^IInventory tile-entity
+            per-stack (fn [^ItemStack istack]
+                        (if (and istack (< 0 (.-stackSize istack)))
+                          (let [rand-x (+ (* (rand) 0.8) 0.1)
+                                rand-y (+ (* (rand) 0.8) 0.1)
+                                rand-z (+ (* (rand) 0.8) 0.1)
+                                entity-item (EntityItem. world (+ x rand-x) (+ y rand-y) (+ z rand-z) (itemstack (.getItem istack) (.-stackSize istack) (.getItemDamage istack)))]
+                            (if (.hasTagCompound istack)
+                              (.setTagCompound (.getEntityItem entity-item) (.copy (.getTagCompound istack))))
+                            (set! (.-motionX entity-item) (* (rand) 0.05))
+                            (set! (.-motionY entity-item) (+ (* (rand) 0.05) 0.2))
+                            (set! (.-motionZ entity-item) (* (rand) 0.05))
+                            (.spawnEntityInWorld world entity-item)
+                            (set! (.-stackSize istack) 0))))]
+        (doall (map #(per-stack (.getStackInSlot tile-entity %1)) (range (.getSizeInventory tile-entity))))))))

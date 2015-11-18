@@ -39,6 +39,9 @@
   (let [proxies (apply hash-map proxies)
         commonproxy (if (:common proxies) (:common proxies) {})
         clientproxy (if (:client proxies) (:client proxies) {})
+        client-ns (when clientproxy
+                    (get clientproxy :pre-init (get clientproxy :init (get clientproxy :post-init nil))))
+        client-ns (if client-ns (first (string/split (str client-ns) #"/")) nil)
         prefix (str mod-name "-")
         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname mod-name)))]
     `(do
@@ -48,12 +51,16 @@
         :methods [[~(with-meta 'preInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPreInitializationEvent] ~'void]
                   [~(with-meta 'init `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLInitializationEvent] ~'void]
                   [~(with-meta 'postInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPostInitializationEvent] ~'void]])
+
        (defn ~(symbol (str prefix "preInit")) [~'this ~'event]
          ~(when (:pre-init commonproxy)
             `(~(:pre-init commonproxy) ~'this ~'event))
          (if client?
-           ~(when (:pre-init clientproxy)
-              `(~(:pre-init clientproxy) ~'this ~'event))))
+           (do
+             ~(when client-ns
+                `(require (symbol ~client-ns)))
+             ~(when (:pre-init clientproxy)
+                `(~(:pre-init clientproxy) ~'this ~'event)))))
 
        (defn ~(symbol (str prefix "init")) [~'this ~'event]
          ~(when (:init commonproxy)
@@ -78,7 +85,7 @@
         override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
         interfaces (:interfaces objdata)
         method-calls (:calls objdata)
-        objdata (dissoc objdata :override :interfaces :calls)
+        objdata (dissoc objdata :override :interfaces :calls :presets)
         setters (map gen-setter (keys objdata))
         calls (map #(if (vector? %2)
                       (apply list %1 %2)
@@ -227,7 +234,7 @@
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class
- :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.4.0"}} forge_clj.core.ForgeClj
+ :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.4.1"}} forge_clj.core.ForgeClj
  :prefix "forge-clj-"
  :methods [[^{Mod$EventHandler []} preInit [cpw.mods.fml.common.event.FMLPreInitializationEvent] void]
            [^{Mod$EventHandler []} init [cpw.mods.fml.common.event.FMLInitializationEvent] void]
