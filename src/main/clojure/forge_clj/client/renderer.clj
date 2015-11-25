@@ -1,13 +1,13 @@
 (ns forge-clj.client.renderer
   (:require
-   [forge-clj.core :refer [defobj]])
+   [forge-clj.core :refer [defobj]]
+   [forge-clj.client.util :refer [bind-texture]])
   (:import
    [net.minecraft.tileentity TileEntity]
    [net.minecraft.entity Entity]
    [net.minecraft.client Minecraft]
    [net.minecraft.client.renderer.tileentity TileEntitySpecialRenderer]
    [net.minecraft.client.model ModelBase ModelRenderer]
-   [net.minecraft.util ResourceLocation]
    [org.lwjgl.opengl GL11]
    [cpw.mods.fml.client.registry ClientRegistry]))
 
@@ -56,13 +56,6 @@
     (doall (map #(render-renderer %1 f5 %2) (map #(if memo?
                                                     (memo-model-renderer model-base %1 memo-test?)
                                                     (model-renderer model-base %1 false)) render-data) (map :opacity render-data)))))
-
-(defn resource-location [location]
-  (ResourceLocation. (str location)))
-
-(defn bind-texture [texture-location]
-  (let [resource (resource-location (str texture-location))]
-    (.bindTexture ^net.minecraft.client.renderer.texture.TextureManager (.getTextureManager ^Minecraft (Minecraft/getMinecraft)) resource)))
 
 (defmacro deftilerenderer [renderer-name update-model & options]
   (let [options (apply hash-map options)

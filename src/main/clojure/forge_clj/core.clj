@@ -1,7 +1,8 @@
 ;Declares the namespace and all imports.
 (ns forge-clj.core
   (:require
-   [clojure.string :as string])
+   [clojure.string :as string]
+   [clojure.tools.nrepl.server :refer [start-server]])
   (:import
    [net.minecraft.block Block]
    [net.minecraft.item Item]
@@ -37,11 +38,18 @@
 ;Proxies can optionally be included via the rest argument, with :common and :client.
 (defmacro defmod [name-ns mod-name version & proxies]
   (let [proxies (apply hash-map proxies)
-        commonproxy (if (:common proxies) (:common proxies) {})
-        clientproxy (if (:client proxies) (:client proxies) {})
+        commonproxy (get proxies :common {})
+        clientproxy (get proxies :client {})
+        repl (get proxies :repl)
+        repl (if (true? repl)
+               7888
+               repl)
         client-ns (when clientproxy
                     (get clientproxy :pre-init (get clientproxy :init (get clientproxy :post-init nil))))
         client-ns (if client-ns (first (string/split (str client-ns) #"/")) nil)
+        common-ns (when commonproxy
+                    (get commonproxy :pre-init (get commonproxy :init (get commonproxy :post-init nil))))
+        common-ns (if common-ns (first (string/split (str common-ns) #"/")) nil)
         prefix (str mod-name "-")
         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname mod-name)))]
     `(do
@@ -51,8 +59,11 @@
         :methods [[~(with-meta 'preInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPreInitializationEvent] ~'void]
                   [~(with-meta 'init `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLInitializationEvent] ~'void]
                   [~(with-meta 'postInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPostInitializationEvent] ~'void]])
-
        (defn ~(symbol (str prefix "preInit")) [~'this ~'event]
+         ~(when repl
+            `(defonce ~'repl-server (start-server :port ~repl)))
+         ~(when common-ns
+            `(require (symbol ~common-ns)))
          ~(when (:pre-init commonproxy)
             `(~(:pre-init commonproxy) ~'this ~'event))
          (if client?
@@ -180,7 +191,7 @@
          :init ~'initialize
          :implements ~interfaces)
         (def ~class-name ~fullname)
-
+        (import ~fullname)
         (defn ~(symbol (str prefix "initialize")) []
           [[] (atom ~fields)])
         (defn ~(symbol (str prefix "assoc")) [~'this ~'obj-key ~'obj-val]
@@ -213,7 +224,7 @@
            :init ~'initialize
            :implements ~interfaces)
           (def ~class-name ~fullname)
-
+          (import ~fullname)
           (defn ~(symbol (str prefix "initialize")) []
             [[] (atom ~fields)])
           (defn ~(symbol (str prefix "assoc")) [~'this ~'obj-key ~'obj-val]
@@ -234,7 +245,7 @@
 
 ;Generates the mod file for forge-clj itself, with respective name, id, etc.
 (gen-class
- :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.4.1"}} forge_clj.core.ForgeClj
+ :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.5.0"}} forge_clj.core.ForgeClj
  :prefix "forge-clj-"
  :methods [[^{Mod$EventHandler []} preInit [cpw.mods.fml.common.event.FMLPreInitializationEvent] void]
            [^{Mod$EventHandler []} init [cpw.mods.fml.common.event.FMLInitializationEvent] void]

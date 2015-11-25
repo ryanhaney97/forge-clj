@@ -1,8 +1,10 @@
 (ns forge-clj.ui
-  (:require [forge-clj.core :refer [genobj]])
+  (:require
+   [clojure.string :as string]
+   [forge-clj.core :refer [gen-classname]])
   (:import
    [cpw.mods.fml.common.network IGuiHandler NetworkRegistry]
-   [net.minecraft.inventory Container Slot]
+   [net.minecraft.inventory Container Slot IInventory]
    [net.minecraft.entity.player EntityPlayer]
    [net.minecraft.item ItemStack]
    [java.util List]))
@@ -17,8 +19,9 @@
 (defn register-gui-handler [mod-instance handler]
   (.registerGuiHandler ^NetworkRegistry (NetworkRegistry/INSTANCE) mod-instance handler))
 
-(defn add-slot-to-container [^Container container inventory slot-number slot-x slot-y]
-  (let [slot (Slot. inventory slot-number slot-x slot-y)]
+(defn add-slot-to-container [^Container container ^IInventory inventory slot-number slot-x slot-y]
+  (let [slot (Slot. inventory (int slot-number) (int slot-x) (int slot-y))]
+    (set! (.-slotNumber slot) (.size ^List (.-inventorySlots container)))
     (.add ^List (.-inventorySlots container) slot)
     (.add ^List (.-inventoryItemStacks container) nil)
     slot))
@@ -44,67 +47,46 @@
                          (make-slot x y)))]
     (add-slots container player-inventory slots)))
 
-(defn merge-item-stack [^Container this ^ItemStack istack start-index end-index reverse?]
-  (let [indexes (range start-index end-index)
-        indexes (if reverse? (reverse indexes) indexes)
-        per-slot (fn [index]
-                   (let [^Slot slot (.get ^List (.-inventorySlots this) index)
-                         ^ItemStack localstack (.getStack slot)]
-                     (if (and localstack
-                              (= (.getItem localstack) (.getItem istack))
-                              (or (not (.getHasSubtypes istack)) (= (.getItemDamage istack) (.getItemDamage localstack)))
-                              (ItemStack/areItemStackTagsEqual istack localstack))
-                       (let [total-size (+ (.-stackSize istack) (.-stackSize localstack))]
-                         (if (<= total-size (.getMaxStackSize istack))
-                           (do
-                             (set! (.-stackSize localstack) 0)
-                             (set! (.-stackSize istack) total-size)
-                             (.onSlotChanged slot)
-                             true)
-                           (if (< (.-stackSize istack) (.getMaxStackSize istack))
-                             (do
-                               (set! (.-stackSize localstack) (- (.-stackSize localstack) (- (.getMaxStackSize istack) (.-stackSize istack))))
-                               (set! (.-stackSize istack) (.getMaxStackSize istack))
-                               (.onSlotChanged slot)
-                               true)
-                             false)))
-                       false)))
-        per-slot-second (fn [[index & others]]
-                          (if (and index (or (and (not reverse?) (< index end-index)) (and reverse? (>= index start-index))))
-                            (let [^Slot slot (.get ^List (.-inventorySlots this) index)
-                                  ^ItemStack localstack (.getStack slot)]
-                              (if (= localstack nil)
-                                (do
-                                  (.putStack slot ^ItemStack (.copy istack))
-                                  (.onSlotChanged slot)
-                                  (set! (.-stackSize istack) 0)
-                                  true)
-                                (recur others)))
-                            false))
-        slot-calls (doall (map per-slot indexes))
-        slot-calls-other (per-slot-second indexes)]
-    (or (not (empty? (filter identity slot-calls))) slot-calls-other)))
-
-(defmacro make-container [player-inventory bound-inventory & args]
-  (let [objdata (apply hash-map args)
-        hotbar? (:include-hotbar objdata)
-        inventory? (:include-inventory objdata)
-        slots (:slots objdata)
-        objdata (if (get-in objdata [:override :merge-item-stack])
-                  objdata
-                  (assoc-in objdata [:override :merge-item-stack] merge-item-stack))
-        objdata (dissoc objdata :slots :include-hotbar :include-inventory)]
-    `(doto
-       (genobj Container [] ~objdata)
-       ~(if slots
-          `(add-slots ~bound-inventory ~slots)
-          `(identity))
-       ~(if inventory?
-          `(add-player-inventory ~player-inventory)
-          `(identity))
-       ~(if hotbar?
-          `(add-player-hotbar ~player-inventory)
-          `(identity)))))
+(defmacro defcontainer [name-ns class-name & args]
+  (let [classdata (apply hash-map args)
+        hotbar? (:player-hotbar? classdata)
+        inventory? (:player-inventory? classdata)
+        slots (:slots classdata)
+        prefix (str class-name "-")
+        interfaces (get classdata :interfaces [])
+        super-methods (:expose-methods classdata)
+        exposed-fields (:expose-fields classdata)
+        fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))
+        this-sym (with-meta 'this {:tag fullname})]
+    `(do
+       (gen-class
+        :name ~fullname
+        :prefix ~prefix
+        :extends Container
+        :exposes-methods ~super-methods
+        :init ~'initialize
+        :post-init ~'post-initialize
+        :constructors {[IInventory IInventory] []}
+        :state ~'data
+        :implements ~interfaces)
+       (def ~class-name ~fullname)
+       (import ~fullname)
+       (defn ~(symbol (str prefix "initialize"))
+         ([]
+          [[] {}])
+         ([~'player-inventory ~'bound-inventory]
+          [[] {:player-inventory ~'player-inventory
+               :bound-inventory ~'bound-inventory}]))
+       (defn ~(symbol (str prefix "post-initialize"))
+         ([~this-sym]
+          nil)
+         ([~this-sym ~'player-inventory ~'bound-inventory]
+          ~(if slots
+             `(add-slots ~this-sym ~'bound-inventory ~slots))
+          ~(if inventory?
+             `(add-player-inventory ~this-sym ~'player-inventory))
+          ~(if hotbar?
+             `(add-player-hotbar ~this-sym ~'player-inventory)))))))
 
 (defn open-gui [^EntityPlayer player mod-instance id world x y z]
   (.openGui player mod-instance id world x y z))

@@ -1,26 +1,26 @@
 (ns forge-clj.client.ui
   (:require
-   [forge-clj.core :refer [genobj]]
-   [forge-clj.client.renderer :refer [bind-texture]])
+   [forge-clj.core :refer [gen-classname]]
+   [clojure.string :as string])
   (:import
    [net.minecraft.client.gui.inventory GuiContainer]
    [net.minecraft.client.gui Gui]
-   [org.lwjgl.opengl GL11]))
+   [net.minecraft.inventory Container]))
 
-(defn draw-rect [^Gui gui rect-map]
-  (.drawTexturedModalRect gui (:x rect-map) (:y rect-map) (:u rect-map) (:v rect-map) (:width rect-map) (:height rect-map)))
-
-(defmacro make-gui-container [container background foreground & args]
-  (let [objdata (apply hash-map args)
-        texture (:texture objdata)
-        draw-background `(fn [~'partial-ticks ~'mouse-x ~'mouse-y]
-                           (GL11/glColor4f (float 1) (float 1) (float 1) (float 1))
-                           ~(if texture
-                             `(bind-texture ~texture))
-                           (~background ~'this ~'partial-ticks ~'mouse-x ~'mouse-y))
-        draw-foreground `(fn [~'mouse-x ~'mouse-y]
-                           (~foreground ~'this ~'mouse-x ~'mouse-y))
-        objdata (assoc-in objdata [:override :draw-gui-container-background-layer] draw-background)
-        objdata (assoc-in objdata [:override :draw-gui-container-foreground-layer] draw-foreground)
-        objdata (dissoc objdata :texture)]
-    `(genobj GuiContainer [~container] ~objdata)))
+(defmacro defguicontainer [name-ns class-name & args]
+  (let [classdata (apply hash-map args)
+        prefix (str class-name "-")
+        interfaces (get classdata :interfaces [])
+        super-methods (:expose-methods classdata)
+        exposed-fields (:expose-fields classdata)
+        fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))]
+    `(do
+       (gen-class
+        :name ~fullname
+        :prefix ~prefix
+        :extends GuiContainer
+        :exposes-methods ~super-methods
+        :exposes ~exposed-fields
+        :implements ~interfaces)
+       (def ~class-name ~fullname)
+       (import ~fullname))))

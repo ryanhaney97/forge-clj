@@ -20,6 +20,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 
 ##Downloads
 
+- Version 0.5.0: [forge-clj](http://bit.ly/1GREeYa "forge-clj Version 0.5.0") [forge-clj devkit](http://bit.ly/1GREcQ4 "forge-clj devkit Version 0.5.0")
+
 - Version 0.4.1: [forge-clj](http://bit.ly/1WZdeNA "forge-clj Version 0.4.1") [forge-clj devkit](http://bit.ly/1YgDtfB "forge-clj devkit Version 0.4.1")
 
 - Version 0.4.0: [forge-clj](http://bit.ly/1GREpCN "forge-clj Version 0.4.0") [forge-clj devkit](http://bit.ly/1GREqXl "forge-clj devkit Version 0.4.0")
@@ -33,6 +35,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 - Version 0.2.0: [forge-clj](http://bit.ly/1FTJ5HO "forge-clj Version 0.2.0") [forge-clj devkit](http://bit.ly/1jOENra "forge-clj devkit Version 0.2.0")
 
 ##Changelog
+
+- Version 0.5.0: Added REPL support. To use it, first add the :repl keyword to the defmod macro, and set it to your port number or set it to true to use the default port of 7888. Then just connect to it with another tool (if using leiningen do "lein repl :connect \<portnumber\>"). Also finished adding support for GUIs (with inventory).
 
 - Version 0.4.1: Made it so that forge-clj works on dedicated servers now. Make sure that your client namespace is not required in your core, and you use the full namespace name when specifying it now. It'll auto-require the client ns if this is on the integrated client. Also did some things to the NBT system, fixing special strings such as "nil", and adding support for maps, vectors, lists, and itemstacks.
 

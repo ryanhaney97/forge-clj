@@ -48,7 +48,8 @@
         :implements [cpw.mods.fml.common.network.simpleimpl.IMessageHandler])
        (defn ~(symbol (str prefix "onMessage")) [~'this ~'message ~'context]
          (~on-message (deref (.-data ~(with-meta 'message {:tag 'forge_clj.network.NBTPacket}))) ~'context))
-       (def ~handler-name ~fullname))))
+       (def ~handler-name ~fullname)
+       (import ~fullname))))
 
 ;Creates a network given the network name.
 (defn create-network [network-name]

@@ -10,10 +10,14 @@
    [net.minecraft.creativetab CreativeTabs]
    [net.minecraft.entity.player EntityPlayer]
    [net.minecraft.entity.item EntityItem]
-   [net.minecraft.util ChatComponentText]
+   [net.minecraft.util ChatComponentText Vec3 MovingObjectPosition]
    [net.minecraft.inventory IInventory]
+   [net.minecraft.server MinecraftServer]
    [net.minecraft.world World]
    [cpw.mods.fml.common.registry GameRegistry]))
+
+(defn server-worlds []
+  (.-worldServers ^MinecraftServer (MinecraftServer/getServer)))
 
 (defmulti make-itemstack (fn [item amount metadata] (type item)))
 (defmethod make-itemstack Item [^Item item amount metadata]
@@ -93,3 +97,12 @@
                             (.spawnEntityInWorld world entity-item)
                             (set! (.-stackSize istack) 0))))]
         (doall (map #(per-stack (.getStackInSlot tile-entity %1)) (range (.getSizeInventory tile-entity))))))))
+
+(defn get-look-coords [^EntityPlayer player ^World world]
+  (let [^Vec3 pos-vec (Vec3/createVectorHelper (.-posX player) (+ (.-posY player) (.getEyeHeight player)) (.-posZ player))
+        ^Vec3 look-vec (.getLookVec player)
+        ^MovingObjectPosition mop (.rayTraceBlocks world pos-vec look-vec)]
+    [(.-blockX mop) (.-blockY mop) (.-blockZ mop) (.-sideHit mop)]))
+
+(defn construct [klass & args]
+  (clojure.lang.Reflector/invokeConstructor klass (into-array Object args)))
