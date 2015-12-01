@@ -1,5 +1,6 @@
-;Declares the namespace and all imports.
 (ns forge-clj.core
+  "Includes all of the core functionality for forge-clj, such as defmod,
+  and general-purpose macros used by other namespaces in forge-clj."
   (:require
    [clojure.string :as string]
    [clojure.tools.nrepl.server :refer [start-server]])
@@ -11,32 +12,36 @@
    [cpw.mods.fml.common Mod Mod$EventHandler FMLCommonHandler IWorldGenerator]
    [cpw.mods.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
-;Declares a final global symbol, that will be set later on as true if client or false if dedicated server.
 (declare client?)
 
-;Given a key word, returns a java method as a symbol by capitalizing all but the first word.
-(defn gen-method [k]
+(defn gen-method
+  "Given a key word, returns a java method as a symbol by capitalizing all but the first word."
+  [k]
   (let [key-name (name k)
         words (string/split key-name #"-")
         method-name (apply str (first words) (map string/capitalize (rest words)))]
     (symbol method-name)))
 
-;Given a key word, returns a setter java method as a symbol by adding a prefix,
-;and capitalizing the remaining words.
-(defn gen-setter [k]
+(defn gen-setter
+  "Given a key word, returns a setter java method as a symbol by adding a prefix,
+  and capitalizing the remaining words."
+  [k]
   (symbol (str "." (gen-method (str "set-" (name k))))))
 
-;Given a symbol, returns a symbol representing a class name for java by capitalizing all words.
-(defn gen-classname [s]
+(defn gen-classname
+  "Given a symbol, returns a symbol representing a class name for java by capitalizing all words."
+  [s]
   (let [s (str s)
         words (string/split s #"-")
         class-name (apply str (map string/capitalize words))]
     (symbol class-name)))
-
-;Takes the current user namespace, the name of the mod, the version, and a rest argument evaled as a map.
-;Using these things, constructs a class for the mod, with the proper annotations and such.
-;Proxies can optionally be included via the rest argument, with :common and :client.
-(defmacro defmod [name-ns mod-name version & proxies]
+(defmacro defmod
+  "MACRO: Takes the current user namespace, the name of the mod, the version, and a rest argument evaled as a map.
+  Using these things, constructs a class for the mod, with the proper annotations and such.
+  Proxies can optionally be included via the rest argument, with :common and :client.
+  When including a proxy, DO NOT REQUIRE THE NAMESPACE, and instead use the FULL NAMESPACE NAME.
+  This will allow forge-clj to include the client namespaces only if run on an integrated client."
+  [name-ns mod-name version & proxies]
   (let [proxies (apply hash-map proxies)
         commonproxy (get proxies :common {})
         clientproxy (get proxies :client {})
@@ -87,16 +92,26 @@
            ~(when (:post-init clientproxy)
               `(~(:post-init clientproxy) ~'this ~'event)))))))
 
-;General purpose macro used to extend objects. Takes the superclass, constructor arguments (as a vector), the name,
-;and the data (as a map), to create an instance of an anonymous class that extends the provided superclass.
-(defmacro genobj [superclass constructor-args objdata]
+(defmacro genobj
+  "MACRO: General purpose macro used to extend objects. Takes the superclass, constructor arguments (as a vector), the name,
+  and the data (as a map), to create an instance of an anonymous class that extends the provided superclass.
+  The data given will be converted to a java setter that will be called on the resulting object
+  (for example, :block-name \"name\" becomes .setBlockName(\"name\")).
+  Multiple arguments can be specified using a vector.
+
+  This occurs unless one of the following special keywords is used:
+
+  :override - should contain a map of method-names (as keywords, such as :set-block, which results in .setBlock) and functions to override them.
+  :interfaces - makes the object implement the provided interfaces, contained in a vector. Interface methods must be overriden via :override.
+  :calls - map of calls on the final object. Differs from normal since you can specify methods without the word set in front of them."
+  [superclass constructor-args objdata]
   (let [overrides (:override objdata)
         override-methods (when overrides (map gen-method (keys overrides)))
         override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
         override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
         interfaces (:interfaces objdata)
         method-calls (:calls objdata)
-        objdata (dissoc objdata :override :interfaces :calls :presets)
+        objdata (dissoc objdata :override :interfaces :calls)
         setters (map gen-setter (keys objdata))
         calls (map #(if (vector? %2)
                       (apply list %1 %2)
@@ -114,38 +129,21 @@
          ~@calls
          ~@method-calls))))
 
-(defmacro defobj [superclass constructor-args obj-name objdata]
+(defmacro defobj
+  "MACRO: same as genobj, but takes a name (as the third argument), and stores the resulting instance in a def with that name.
+  Other macros using this will have DEFOBJ: in their docs, instead of MACRO:.
+  Realize that those using defobj are indeed macros as well."
+  [superclass constructor-args obj-name objdata]
   `(def ~obj-name (genobj ~superclass ~constructor-args ~objdata)))
 
-;General purpose macro used to extend objects.
-;Similar to defobj at first glance, except that this generates an actual class instead of an anonymous instance.
-(defmacro defclass
-  ([superclass name-ns class-name classdata]
-   (let [super-methods (:expose classdata)
-         interfaces (:interfaces classdata)
-         prefix (str class-name "-")
-         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))]
-     `(do
-        (gen-class
-         :name ~fullname
-         :prefix ~prefix
-         :extends ~superclass
-         :exposes-methods ~super-methods
-         :implements ~interfaces)
-        (def ~class-name ~fullname))))
-  ([name-ns class-name classdata]
-   (let [interfaces (:interfaces classdata)
-         prefix (str class-name "-")
-         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))]
-     `(do
-        (gen-class
-         :name ~fullname
-         :prefix ~prefix
-         :implements ~interfaces)
-        (def ~class-name ~fullname)))))
-
-;A series of register functions. When calling "register", the proper function will be called underneath.
-(defmulti register (fn [element & args] [(count args) (type element)]))
+(defmulti register
+  "Multimethod consisting of a series of register functions. Handles the following arguments:
+  (block-object, name): registers block with specified name.
+  (item-object, name): registers item with specified name.
+  (block-object, name, blockitem): registers block with specified name and blockitem object.
+  (world-generator): registers a world generator.
+  (world-generator, priority): registers a world generator with the specified priority."
+  (fn [element & args] [(count args) (type element)]))
 (defmethod register [1 Block] [element forge-name]
   (GameRegistry/registerBlock element forge-name)
   element)
@@ -161,19 +159,30 @@
 (defmethod register [1 IWorldGenerator] [generator mod-priority]
   (GameRegistry/registerWorldGenerator generator mod-priority))
 
-;Registers a Tile Entity.
-(defn register-tile-entity [entity id]
+(defn register-tile-entity
+  "Registers a Tile Entity with the specified id"
+  [entity id]
   (GameRegistry/registerTileEntity entity id))
 
-;Registers an Event Handler.
-(defn register-events [handler]
+(defn register-events
+  "Registers an Event Handler."
+  [handler]
   (.register (.bus (FMLCommonHandler/instance)) handler)
   (.register MinecraftForge/EVENT_BUS handler))
 
-;Creates class similarly to defclass. However, it implements the ITransientAssociative interface, allowing its data
-;to be stored and retrieved like a hash-map. When assoc-ing one of these classes, use assoc! instead of assoc, since
-;this changes state.
 (defmacro defassocclass
+  "MACRO: Creates a class with the specified superclass (optional), namespace name, class name, and classdata.
+  This class implements ITransientAssociative, and as such classes created with this can be treated similarly to a hash-map.
+  For example, data can be obtained via (:keyword class-instance), or (get class-instance :keyword).
+  Data can also be changed via the assoc! function. Remember to include the exclaimation point!
+  Other macros using this will have DEFASSOCCLASS: in their docs instead of MACRO:.
+  This also means that those labled as using this macro are also macros.
+
+  The provided classdata is a map that can contain any of the following:
+
+  :expose (with superclass only) - map that exposes the the super methods specified by the key, as the name provided. Easily lets you call super methods.
+  :interfaces - Vector of interfaces to add to the class.
+  :fields - initial map of fields to be set, and their default values, when the class is first initialized."
   ([superclass name-ns class-name classdata]
    (let [super-methods (:expose classdata)
          interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
@@ -243,7 +252,9 @@
             ([~'this ~'obj ~'notfound]
              (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound))))))))
 
-;Generates the mod file for forge-clj itself, with respective name, id, etc.
+;Mod declaration by forge-clj
+;----------------------------
+
 (gen-class
  :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.5.0"}} forge_clj.core.ForgeClj
  :prefix "forge-clj-"
@@ -251,9 +262,6 @@
            [^{Mod$EventHandler []} init [cpw.mods.fml.common.event.FMLInitializationEvent] void]
            [^{Mod$EventHandler []} postInit [cpw.mods.fml.common.event.FMLPostInitializationEvent] void]])
 
-;Event functions, init and postInit do nothing. The preInit function detects if this is the client or server, and sets
-;the client? symbol as true if this is on an integrated client, or false if this is on a dedicated server.
-;Used in defmod for proxy specification.
 (defn forge-clj-preInit [this event]
   (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
 (defn forge-clj-init [this event])

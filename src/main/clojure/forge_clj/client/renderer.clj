@@ -1,4 +1,5 @@
 (ns forge-clj.client.renderer
+  "Contains the functions and macros required in order to handle model rendering."
   (:require
    [forge-clj.core :refer [defobj]]
    [forge-clj.client.util :refer [bind-texture]])
@@ -11,7 +12,9 @@
    [org.lwjgl.opengl GL11]
    [cpw.mods.fml.client.registry ClientRegistry]))
 
-(defn model-renderer [^ModelBase base property-map memo-test?]
+(defn model-renderer
+  "Function that takes a model-map and creates a ModelRenderer object. If memo-test? is set to true, will print to console every time it is called."
+  [^ModelBase base property-map memo-test?]
   (if memo-test?
     (println "Renderer Called!"))
   (let [texture-offset (get property-map :texture-offset {})
@@ -33,7 +36,9 @@
 
 (def memo-model-renderer (memoize model-renderer))
 
-(defn render-renderer [^ModelRenderer renderer f opacity]
+(defn render-renderer
+  "Given a ModelRenderer object, the f needed by it, and the opacity of the renderer, renderers the renderer in game."
+  [^ModelRenderer renderer f opacity]
   (if opacity
     (do
       (GL11/glEnable GL11/GL_BLEND)
@@ -43,27 +48,42 @@
       (GL11/glDisable GL11/GL_BLEND))
     (.render renderer f)))
 
-(defn render-tile-entity [^ModelBase model-base update-fn ^TileEntity tile-entity f f1 f2 f3 f4 f5 memo? memo-test?]
+(defn render-tile-entity
+  "Renders a Tile Entity given a model-base, update-function, tile entity, floats, and whether to use the memo? or memo-test? features."
+  [^ModelBase model-base update-fn ^TileEntity tile-entity f f1 f2 f3 f4 f5 memo? memo-test?]
   (.render model-base nil f f1 f2 f3 f4 f5)
   (let [render-data (vals (update-fn tile-entity))]
     (doall (map #(render-renderer %1 f5 %2) (map #(if memo?
                                                     (memo-model-renderer model-base %1 memo-test?)
                                                     (model-renderer model-base %1 false)) render-data) (map :opacity render-data)))))
 
-(defn render-entity [^ModelBase model-base update-fn ^Entity entity f f1 f2 f3 f4 f5 memo? memo-test?]
+(defn render-entity
+  "Renders an Entity given a model-base, update-function, entity, floats, and whether to use the memo? or memo-test? features."
+  [^ModelBase model-base update-fn ^Entity entity f f1 f2 f3 f4 f5 memo? memo-test?]
   (.render model-base entity f f1 f2 f3 f4 f5)
   (let [render-data (vals (update-fn entity))]
     (doall (map #(render-renderer %1 f5 %2) (map #(if memo?
                                                     (memo-model-renderer model-base %1 memo-test?)
                                                     (model-renderer model-base %1 false)) render-data) (map :opacity render-data)))))
 
-(defmacro deftilerenderer [renderer-name update-model & options]
+(defmacro deftilerenderer
+  "DEFOBJ: Given a function to call upon updating along with the normal options,
+  creates an anonymous instance of a TileEntitySpecialRenderer.
+
+  The update function should take a single argument that is the current state of the tile-entity,
+  and return map representing the model to be rendered.
+
+  The following keys are treated specially:
+
+  :texture - specifies a texture for the model, via a string representing the resource location it is located at.
+  :memo? - If set to true, will use a memoized version of the main rendering function. Can be very performant so long as the data generated loops. False by default.
+  :memo-test? - If set to true, will cause the main rendering function to print to the console every time it is called. Use with :memo? to see if your data loops properly, and can actually use memoization."
+  [renderer-name update-model & options]
   (let [options (apply hash-map options)
         texture (:texture options)
-        color (get options :color {})
         memo? (:memo? options)
         memo-test? (:memo-test? options)
-        options (dissoc options :texture :render-args :color :update-model :memo? :memo-test?)
+        options (dissoc options :texture :memo? :memo-test?)
         render-tile-entity-at `(fn [~'entity ~'x ~'y ~'z ~'f]
                                  (GL11/glPushMatrix)
                                  (GL11/glTranslated ~'x ~'y ~'z)
@@ -81,5 +101,7 @@
        (def ~(symbol (str renderer-name "-model-obj")) (proxy [ModelBase] []))
        (defobj TileEntitySpecialRenderer [] ~renderer-name ~options))))
 
-(defn bind-tile-renderer [^Class tile-entity-class ^TileEntitySpecialRenderer renderer]
+(defn bind-tile-renderer
+  "Given a tile entity class and an instance of a TileEntitySpecialRenderer, binds the renderer to the tile entity."
+  [^Class tile-entity-class ^TileEntitySpecialRenderer renderer]
   (ClientRegistry/bindTileEntitySpecialRenderer tile-entity-class renderer))

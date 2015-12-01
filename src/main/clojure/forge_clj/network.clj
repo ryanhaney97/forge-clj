@@ -1,4 +1,6 @@
 (ns forge-clj.network
+  "Contains macros, classes, and functions involving the SimpleNetworkWrapper,
+  and related network implementations."
   (:require
    [forge-clj.nbt :refer [nbt->map map->nbt]]
    [forge-clj.core :refer [gen-classname]]
@@ -10,8 +12,13 @@
    [cpw.mods.fml.common.network.simpleimpl IMessage IMessageHandler SimpleNetworkWrapper]
    [io.netty.buffer ByteBuf]))
 
-;Generates a class for forge-clj itself that serves as the default packet used by its networking functions.
-;Stores and retrieves data via the nbt and hash-map converter used earlier.
+;The following generates a class for forge-clj itself that serves as the default packet
+;used by its networking functions.
+
+;This packet stores and retrieves data via the nbt and hash-map converter in forge-clj.nbt.
+
+;------------------------------------------------------------------------------------------
+
 (gen-class
  :name forge_clj.network.NBTPacket
  :prefix "nbt-packet-"
@@ -37,8 +44,17 @@
         nbt-data (map->nbt converted-data (NBTTagCompound.))]
     (ByteBufUtils/writeTag buf nbt-data)))
 
-;Creates a packet handler given the namespace, handler name, and the function to call upon receiving a message.
-(defmacro gen-packet-handler [name-ns handler-name on-message]
+;------------------------------------------------------------------------------------------
+
+(defmacro gen-packet-handler
+  "MACRO: Creates a packet handler given the namespace, handler name,
+  and the function to call upon receiving a message.
+
+  Uses forge_clj.network.NBTPacket as the packet underneath.
+
+  The function called upon receiving a message is called with 2 arguments.
+  The first being the hashmap received, and the second being the MessageContext."
+  [name-ns handler-name on-message]
   (let [fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname handler-name)))
         prefix (str handler-name "-")]
     `(do
@@ -51,34 +67,45 @@
        (def ~handler-name ~fullname)
        (import ~fullname))))
 
-;Creates a network given the network name.
-(defn create-network [network-name]
+(defn create-network
+  "Creates a network given the network name."
+  [network-name]
   (.newSimpleChannel NetworkRegistry/INSTANCE network-name))
 
-;Registers a network message given a network, a packet handler, an id, and a side.
-(defn register-message [^SimpleNetworkWrapper network ^Class handler ^Integer id side]
+(defn register-message
+  "Registers a network message given a network, a packet handler, an id, and a side."
+  [^SimpleNetworkWrapper network ^Class handler id side]
   (let [^Side network-side (if (= side :client)
                              Side/CLIENT
                              (if (= side :server)
                                Side/SERVER
                                side))]
-    (.registerMessage network handler forge_clj.network.NBTPacket id network-side)))
+    (.registerMessage network handler forge_clj.network.NBTPacket (int id) network-side)))
 
-;Sends a message along the specified wrapper. Message is in the form of a map, and requires a target to send to.
-(defn send-to [^SimpleNetworkWrapper network nbt-map target]
+(defn send-to
+  "Sends a message along the specified network from the server to the client side target.
+  Message is in the form of a map"
+  [^SimpleNetworkWrapper network nbt-map target]
   (let [packet (forge_clj.network.NBTPacket. nbt-map)]
     (.sendTo network packet target)))
 
 (defn send-to-all-around
+  "Sends a message along the specified network from the server to the clients around the specified target.
+  Message is in the form of a map"
   ([^SimpleNetworkWrapper network nbt-map target]
    (let [packet (forge_clj.network.NBTPacket. nbt-map)]
      (.sendToAllAround network packet target))))
 
-(defn send-to-all [^SimpleNetworkWrapper network nbt-map]
+(defn send-to-all
+  "Sends a message along the specified network from the server to all clients.
+  Message is in the form of a map"
+  [^SimpleNetworkWrapper network nbt-map]
   (let [packet (forge_clj.network.NBTPacket. nbt-map)]
     (.sendToAll network packet)))
 
-;Sends a message from the client to the server along the specified wrapper. Message is in the form of a map.
-(defn send-to-server [^SimpleNetworkWrapper network nbt-map]
+(defn send-to-server
+  "Sends a message from the client to the server along the specified network.
+  Message is in the form of a map."
+  [^SimpleNetworkWrapper network nbt-map]
   (let [packet (forge_clj.network.NBTPacket. nbt-map)]
     (.sendToServer network packet)))

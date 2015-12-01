@@ -1,4 +1,5 @@
 (ns forge-clj.client.ui
+  "Contains the client side ui macros."
   (:require
    [forge-clj.core :refer [gen-classname]]
    [clojure.string :as string])
@@ -7,7 +8,17 @@
    [net.minecraft.client.gui Gui]
    [net.minecraft.inventory Container]))
 
-(defmacro defguicontainer [name-ns class-name & args]
+(defmacro defguicontainer
+  "MACRO: Given a name space, class name, and classdata, creates a class extending GuiContainer.
+
+  Remember to create implementations of drawGuiContainerBackgroundLayer and drawGuiContainerForegroundLayer or this will break!
+
+  The following keywords are treated specially:
+
+  :interfaces - vector of interfaces to implement.
+  :expose-methods - map of methods to expose.
+  :expose-fields - map of fields to expose. Useful for protected fields."
+  [name-ns class-name & args]
   (let [classdata (apply hash-map args)
         prefix (str class-name "-")
         interfaces (get classdata :interfaces [])

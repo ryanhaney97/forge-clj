@@ -1,4 +1,5 @@
 (ns forge-clj.tileentity
+  "Contains macros and functions related to Tile Entities."
   (:require
    [forge-clj.nbt :refer [read-tag-data! write-tag-data! map->nbt nbt->map]]
    [forge-clj.core :refer [defassocclass gen-classname]]
@@ -9,8 +10,15 @@
    [net.minecraft.network.play.server S35PacketUpdateTileEntity]
    [net.minecraft.world World]))
 
-;Creates a Tile Entity class.
-(defmacro deftileentity [name-ns class-name & args]
+(defmacro deftileentity
+  "DEFASSOCCLASS: Creates a Tile Entity class.
+
+  The following keywords are treated specially:
+
+  :sync-data - vector of keywords that involve the data to be synced when getDescriptionPacket and onDataPacket are called. Use this for render data.
+  :on-load - called after loading nbt data, with an instance of this passed to it.
+  :on-save - called before saving nbt data, with an instance of this passed to it."
+  [name-ns class-name & args]
   (let [classdata (apply hash-map args)
         prefix (str class-name "-")
         classdata (assoc-in classdata [:expose 'readFromNBT] 'superReadFromNBT)
@@ -36,6 +44,7 @@
        (defn ~(symbol (str prefix "onDataPacket")) [~'this ~'network-manager ~(with-meta 'packet `{:tag S35PacketUpdateTileEntity})]
          (swap! (~'.-data ~this-sym) merge (nbt->map (.func_148857_g ~'packet)))))))
 
-;Gets the tile entity in the world at the specified coordinates. For convenience.
-(defn get-tile-entity-at [^World world x y z]
+(defn get-tile-entity-at
+  "Gets the tile entity in the world at the specified coordinates. For convenience."
+  [^World world x y z]
   (.getTileEntity world (int x) (int y) (int z)))
