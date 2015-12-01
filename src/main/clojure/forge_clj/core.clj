@@ -3,6 +3,7 @@
   and general-purpose macros used by other namespaces in forge-clj."
   (:require
    [clojure.string :as string]
+   [clojure.set :as cset]
    [clojure.tools.nrepl.server :refer [start-server]])
   (:import
    [net.minecraft.block Block]
@@ -35,6 +36,22 @@
         words (string/split s #"-")
         class-name (apply str (map string/capitalize words))]
     (symbol class-name)))
+
+(defn get-fullname [name-ns class-name]
+  (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name))))
+
+(defmacro with-prefix [prefix & defs]
+  (let [per-def (fn [possible-def]
+                  (if (or (= (first possible-def) 'def) (= (first possible-def) 'defn) (= (first possible-def) 'def-) (= (first possible-def) 'defn-) (= (first possible-def) `def) (= (first possible-def) `defn) (= (first possible-def) `def-) (= (first possible-def) `defn-))
+                    (let [first-val (first possible-def)
+                          def-name (second possible-def)
+                          def-name (symbol (str prefix def-name))
+                          def-statement (cons first-val (cons def-name (rest (rest possible-def))))]
+                      def-statement)
+                    possible-def))
+        def-statements (cons `do (map per-def defs))]
+    def-statements))
+
 (defmacro defmod
   "MACRO: Takes the current user namespace, the name of the mod, the version, and a rest argument evaled as a map.
   Using these things, constructs a class for the mod, with the proper annotations and such.
@@ -64,33 +81,34 @@
         :methods [[~(with-meta 'preInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPreInitializationEvent] ~'void]
                   [~(with-meta 'init `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLInitializationEvent] ~'void]
                   [~(with-meta 'postInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPostInitializationEvent] ~'void]])
-       (defn ~(symbol (str prefix "preInit")) [~'this ~'event]
-         ~(when repl
-            `(defonce ~'repl-server (start-server :port ~repl)))
-         ~(when common-ns
-            `(require (symbol ~common-ns)))
-         ~(when (:pre-init commonproxy)
-            `(~(:pre-init commonproxy) ~'this ~'event))
-         (if client?
-           (do
-             ~(when client-ns
-                `(require (symbol ~client-ns)))
-             ~(when (:pre-init clientproxy)
-                `(~(:pre-init clientproxy) ~'this ~'event)))))
+       (with-prefix ~prefix
+         (defn ~'preInit [~'this ~'event]
+           ~(when repl
+              `(defonce ~'repl-server (start-server :port ~repl)))
+           ~(when common-ns
+              `(require (symbol ~common-ns)))
+           ~(when (:pre-init commonproxy)
+              `(~(:pre-init commonproxy) ~'this ~'event))
+           (if client?
+             (do
+               ~(when client-ns
+                  `(require (symbol ~client-ns)))
+               ~(when (:pre-init clientproxy)
+                  `(~(:pre-init clientproxy) ~'this ~'event)))))
 
-       (defn ~(symbol (str prefix "init")) [~'this ~'event]
-         ~(when (:init commonproxy)
-            `(~(:init commonproxy) ~'this ~'event))
-         (if client?
-           ~(when (:init clientproxy)
-              `(~(:init clientproxy) ~'this ~'event))))
+         (defn ~'init [~'this ~'event]
+           ~(when (:init commonproxy)
+              `(~(:init commonproxy) ~'this ~'event))
+           (if client?
+             ~(when (:init clientproxy)
+                `(~(:init clientproxy) ~'this ~'event))))
 
-       (defn ~(symbol (str prefix "postInit")) [~'this ~'event]
-         ~(when (:post-init commonproxy)
-            `(~(:post-init commonproxy) ~'this ~'event))
-         (if client?
-           ~(when (:post-init clientproxy)
-              `(~(:post-init clientproxy) ~'this ~'event)))))))
+         (defn ~'postInit [~'this ~'event]
+           ~(when (:post-init commonproxy)
+              `(~(:post-init commonproxy) ~'this ~'event))
+           (if client?
+             ~(when (:post-init clientproxy)
+                `(~(:post-init clientproxy) ~'this ~'event))))))))
 
 (defmacro genobj
   "MACRO: General purpose macro used to extend objects. Takes the superclass, constructor arguments (as a vector), the name,
@@ -170,87 +188,62 @@
   (.register (.bus (FMLCommonHandler/instance)) handler)
   (.register MinecraftForge/EVENT_BUS handler))
 
-(defmacro defassocclass
-  "MACRO: Creates a class with the specified superclass (optional), namespace name, class name, and classdata.
-  This class implements ITransientAssociative, and as such classes created with this can be treated similarly to a hash-map.
-  For example, data can be obtained via (:keyword class-instance), or (get class-instance :keyword).
-  Data can also be changed via the assoc! function. Remember to include the exclaimation point!
-  Other macros using this will have DEFASSOCCLASS: in their docs instead of MACRO:.
-  This also means that those labled as using this macro are also macros.
-
-  The provided classdata is a map that can contain any of the following:
-
-  :expose (with superclass only) - map that exposes the the super methods specified by the key, as the name provided. Easily lets you call super methods.
-  :interfaces - Vector of interfaces to add to the class.
-  :fields - initial map of fields to be set, and their default values, when the class is first initialized."
+(defmacro defclass
   ([superclass name-ns class-name classdata]
-   (let [super-methods (:expose classdata)
-         interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
-         fields (:fields classdata)
+   (let [classdata (cset/rename-keys classdata {:expose-fields :exposes
+                                                :expose :exposes-methods
+                                                :expose-methods :exposes-methods
+                                                :interfaces :implements})
+         classdata (select-keys classdata [:implements :exposes-methods :constructors :exposes :init :state :post-init :methods :factory :impl-ns :load-impl-ns])
+         classdata (reduce concat [] (into [] classdata))
          prefix (str class-name "-")
-         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))
-         this-sym (with-meta 'this {:tag fullname})]
+         fullname (get-fullname name-ns class-name)]
      `(do
         (gen-class
          :name ~fullname
          :prefix ~prefix
          :extends ~superclass
-         :exposes-methods ~super-methods
-         :state ~'data
-         :init ~'initialize
-         :implements ~interfaces)
+         ~@classdata)
         (def ~class-name ~fullname)
-        (import ~fullname)
-        (defn ~(symbol (str prefix "initialize")) []
-          [[] (atom ~fields)])
-        (defn ~(symbol (str prefix "assoc")) [~'this ~'obj-key ~'obj-val]
-          (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
-          ~'this)
-        (defn ~(symbol (str prefix "conj")) [~'this ~'obj]
-          (swap! (~'.-data ~this-sym) conj ~'obj)
-          ~'this)
-        (defn ~(symbol (str prefix "persistent")) [~'this]
-          (deref (~'.-data ~this-sym)))
-        (defn ~(symbol (str prefix "conj")) [~'this ~'obj]
-          (swap! (~'.-data ~this-sym) conj ~'obj))
-        (defn ~(symbol (str prefix "valAt"))
-          ([~'this ~'obj]
-           (get (deref (~'.-data ~this-sym)) ~'obj))
-          ([~'this ~'obj ~'notfound]
-           (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound))))))
+        (import ~fullname))))
   ([name-ns class-name classdata]
-   (let [interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
+   `(defclass nil ~name-ns ~class-name ~classdata)))
+
+(defmacro defassocclass
+  "DEFCLASS: Creates a class with the specified superclass (optional), namespace name, class name, and classdata.
+  This class implements ITransientAssociative, and as such classes created with this can be treated similarly to a hash-map.
+  For example, data can be obtained via (:keyword class-instance), or (get class-instance :keyword).
+  Data can also be changed via the assoc! function. Remember to include the exclaimation point!
+  Other macros using this will have DEFASSOCCLASS: in their docs instead of MACRO:.
+  This also means that those labeled as using this macro are also macros."
+  ([superclass name-ns class-name classdata]
+   (let [classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
+                     :init 'initialize
+                     :state 'data)
          fields (get classdata :fields {})
          prefix (str class-name "-")
-         fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))
+         fullname (get-fullname name-ns class-name)
          this-sym (with-meta 'this {:tag fullname})]
      `(do
-        (do
-          (gen-class
-           :name ~fullname
-           :prefix ~prefix
-           :state ~'data
-           :init ~'initialize
-           :implements ~interfaces)
-          (def ~class-name ~fullname)
-          (import ~fullname)
-          (defn ~(symbol (str prefix "initialize")) []
+        (defclass ~superclass ~name-ns ~class-name ~classdata)
+        (with-prefix ~prefix
+          (defn ~'initialize []
             [[] (atom ~fields)])
-          (defn ~(symbol (str prefix "assoc")) [~'this ~'obj-key ~'obj-val]
+          (defn ~'assoc [~'this ~'obj-key ~'obj-val]
             (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
             ~'this)
-          (defn ~(symbol (str prefix "conj")) [~'this ~'obj]
+          (defn ~'conj [~'this ~'obj]
             (swap! (~'.-data ~this-sym) conj ~'obj)
             ~'this)
-          (defn ~(symbol (str prefix "persistent")) [~'this]
+          (defn ~'persistent [~'this]
             (deref (~'.-data ~this-sym)))
-          (defn ~(symbol (str prefix "conj")) [~'this ~'obj]
-            (swap! (~'.-data ~this-sym) conj ~'obj))
-          (defn ~(symbol (str prefix "valAt"))
+          (defn ~'valAt
             ([~'this ~'obj]
              (get (deref (~'.-data ~this-sym)) ~'obj))
             ([~'this ~'obj ~'notfound]
-             (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound))))))))
+             (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound)))))))
+  ([name-ns class-name classdata]
+   `(defassocclass nil ~name-ns ~class-name ~classdata)))
 
 ;Mod declaration by forge-clj
 ;----------------------------
@@ -262,7 +255,8 @@
            [^{Mod$EventHandler []} init [cpw.mods.fml.common.event.FMLInitializationEvent] void]
            [^{Mod$EventHandler []} postInit [cpw.mods.fml.common.event.FMLPostInitializationEvent] void]])
 
-(defn forge-clj-preInit [this event]
-  (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
-(defn forge-clj-init [this event])
-(defn forge-clj-postInit [this event])
+(with-prefix forge-clj-
+  (defn preInit [this event]
+    (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
+  (defn init [this event])
+  (defn postInit [this event]))

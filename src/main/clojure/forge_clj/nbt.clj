@@ -56,12 +56,12 @@
 
 (defn nbt->map
   "Converts NBT data into a Clojure map.
-  Note that the ',' and ':' characters need to be escaped out of when used in strings and similar data by using the traditional backslash."
+  Note that the ',' character needs to be escaped out of when used in strings and similar data by using the traditional backslash."
   [^NBTTagCompound nbt]
   (let [nbt-json (str nbt)
         removed-braces (apply str (butlast (rest nbt-json)))
         pairs (string/split removed-braces #"[^\\],")
-        nbt-keys (map #(first (string/split %1 #"[^\\]:")) pairs)
+        nbt-keys (map #(first (string/split %1 #":")) pairs)
         nbt-keys (filter (complement empty?) nbt-keys)
         nbt-pairs (mapv (partial nbt-key-val-pair nbt) nbt-keys)
         nbt-map (into {} nbt-pairs)]

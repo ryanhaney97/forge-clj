@@ -3,7 +3,7 @@
   and related network implementations."
   (:require
    [forge-clj.nbt :refer [nbt->map map->nbt]]
-   [forge-clj.core :refer [gen-classname]]
+   [forge-clj.core :refer [get-fullname with-prefix defclass]]
    [clojure.string :as string])
   (:import
    [net.minecraft.nbt NBTTagCompound]
@@ -19,53 +19,46 @@
 
 ;------------------------------------------------------------------------------------------
 
-(gen-class
- :name forge_clj.network.NBTPacket
- :prefix "nbt-packet-"
- :state data
- :init init
- :constructors {[clojure.lang.PersistentArrayMap] []
-                [] []}
- :implements [cpw.mods.fml.common.network.simpleimpl.IMessage])
+(defclass forge_clj.network nbt-packet {:implements [cpw.mods.fml.common.network.simpleimpl.IMessage]
+                                        :constructors {[clojure.lang.PersistentArrayMap] []
+                                                       [] []}
+                                        :state data
+                                        :init init})
 
-(defn nbt-packet-init
-  ([]
-   [[] (atom {})])
-  ([nbt-map]
-   [[] (atom nbt-map)]))
+(with-prefix nbt-packet-
+  (defn init
+    ([]
+     [[] (atom {})])
+    ([nbt-map]
+     [[] (atom nbt-map)]))
 
-(defn nbt-packet-fromBytes [^forge_clj.network.NBTPacket this ^ByteBuf buf]
-  (let [nbt-data (ByteBufUtils/readTag buf)
-        converted-data (nbt->map nbt-data)]
-    (reset! (.-data this) converted-data)))
+  (defn fromBytes [^NbtPacket this ^ByteBuf buf]
+    (let [nbt-data (ByteBufUtils/readTag buf)
+          converted-data (nbt->map nbt-data)]
+      (reset! (.-data this) converted-data)))
 
-(defn nbt-packet-toBytes [^forge_clj.network.NBTPacket this ^ByteBuf buf]
-  (let [converted-data (deref (.-data this))
-        nbt-data (map->nbt converted-data (NBTTagCompound.))]
-    (ByteBufUtils/writeTag buf nbt-data)))
+  (defn toBytes [^NbtPacket this ^ByteBuf buf]
+    (let [converted-data (deref (.-data this))
+          nbt-data (map->nbt converted-data (NBTTagCompound.))]
+      (ByteBufUtils/writeTag buf nbt-data))))
 
 ;------------------------------------------------------------------------------------------
 
 (defmacro gen-packet-handler
-  "MACRO: Creates a packet handler given the namespace, handler name,
+  "DEFCLASS: Creates a packet handler given the namespace, handler name,
   and the function to call upon receiving a message.
 
-  Uses forge_clj.network.NBTPacket as the packet underneath.
+  Uses forge_clj.network.NbtPacket as the packet underneath.
 
   The function called upon receiving a message is called with 2 arguments.
   The first being the hashmap received, and the second being the MessageContext."
   [name-ns handler-name on-message]
-  (let [fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname handler-name)))
-        prefix (str handler-name "-")]
+  (let [prefix (str handler-name "-")]
     `(do
-       (gen-class
-        :name ~fullname
-        :prefix ~prefix
-        :implements [cpw.mods.fml.common.network.simpleimpl.IMessageHandler])
-       (defn ~(symbol (str prefix "onMessage")) [~'this ~'message ~'context]
-         (~on-message (deref (.-data ~(with-meta 'message {:tag 'forge_clj.network.NBTPacket}))) ~'context))
-       (def ~handler-name ~fullname)
-       (import ~fullname))))
+       (defclass ~name-ns ~handler-name {:implements [cpw.mods.fml.common.network.simpleimpl.IMessageHandler]})
+       (with-prefix ~prefix
+         (defn ~'onMessage [~'this ~'message ~'context]
+           (~on-message (deref (.-data ~(with-meta 'message `{:tag NbtPacket}))) ~'context))))))
 
 (defn create-network
   "Creates a network given the network name."
@@ -80,32 +73,32 @@
                              (if (= side :server)
                                Side/SERVER
                                side))]
-    (.registerMessage network handler forge_clj.network.NBTPacket (int id) network-side)))
+    (.registerMessage network handler NbtPacket (int id) network-side)))
 
 (defn send-to
   "Sends a message along the specified network from the server to the client side target.
   Message is in the form of a map"
   [^SimpleNetworkWrapper network nbt-map target]
-  (let [packet (forge_clj.network.NBTPacket. nbt-map)]
+  (let [packet (NbtPacket. nbt-map)]
     (.sendTo network packet target)))
 
 (defn send-to-all-around
   "Sends a message along the specified network from the server to the clients around the specified target.
   Message is in the form of a map"
   ([^SimpleNetworkWrapper network nbt-map target]
-   (let [packet (forge_clj.network.NBTPacket. nbt-map)]
+   (let [packet (NbtPacket. nbt-map)]
      (.sendToAllAround network packet target))))
 
 (defn send-to-all
   "Sends a message along the specified network from the server to all clients.
   Message is in the form of a map"
   [^SimpleNetworkWrapper network nbt-map]
-  (let [packet (forge_clj.network.NBTPacket. nbt-map)]
+  (let [packet (NbtPacket. nbt-map)]
     (.sendToAll network packet)))
 
 (defn send-to-server
   "Sends a message from the client to the server along the specified network.
   Message is in the form of a map."
   [^SimpleNetworkWrapper network nbt-map]
-  (let [packet (forge_clj.network.NBTPacket. nbt-map)]
+  (let [packet (NbtPacket. nbt-map)]
     (.sendToServer network packet)))

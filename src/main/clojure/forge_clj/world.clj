@@ -1,7 +1,6 @@
 (ns forge-clj.world
   "Contains macros and functions related to world generation."
   (:require
-   [forge-clj.core :refer :all]
    [forge-clj.util :refer [update-map-keys abs]])
   (:import
    [java.util Random]

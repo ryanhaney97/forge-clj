@@ -1,8 +1,7 @@
 (ns forge-clj.ui
   "Contains macros and methods involving uis and guis."
   (:require
-   [clojure.string :as string]
-   [forge-clj.core :refer [gen-classname]])
+   [forge-clj.core :refer [get-fullname defclass with-prefix]])
   (:import
    [cpw.mods.fml.common.network IGuiHandler NetworkRegistry]
    [net.minecraft.inventory Container Slot IInventory]
@@ -64,57 +63,42 @@
     (add-slots container player-inventory slots)))
 
 (defmacro defcontainer
-  "MACRO: Given a namespace, a name, and some classdata, creates a Container class.
+  "DEFCLASS: Given a namespace, a name, and some classdata, creates a Container class.
   The constructor for this class takes an instance of the player's inventory, and an instance of the bound inventory respectively.
 
   The following keywords are treated specially:
 
   :player-hotbar? - if true, adds the player's hotbar slots to the container.
   :player-inventory? - if true, adds the player's inventory slots to the container.
-  :slots - if provided, adds the specified slots to the container. Should be a vector of vectors that contain data along the lines of [slot-number slot-x slot-y]
-  :interfaces - vector of additional interfaces to implement
-  :expose-methods - map of super methods to expose.
-  :expose-fields - map of fields to expose. Useful for protected fields."
+  :slots - if provided, adds the specified slots to the container. Should be a vector of vectors that contain data along the lines of [slot-number slot-x slot-y]"
   [name-ns class-name & args]
   (let [classdata (apply hash-map args)
         hotbar? (:player-hotbar? classdata)
         inventory? (:player-inventory? classdata)
         slots (:slots classdata)
+        classdata (assoc classdata :init 'initialize :post-init 'post-initialize :constructors {[IInventory IInventory] []} :state 'data)
         prefix (str class-name "-")
-        interfaces (get classdata :interfaces [])
-        super-methods (:expose-methods classdata)
-        exposed-fields (:expose-fields classdata)
-        fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name)))
+        fullname (get-fullname name-ns class-name)
         this-sym (with-meta 'this {:tag fullname})]
     `(do
-       (gen-class
-        :name ~fullname
-        :prefix ~prefix
-        :extends Container
-        :exposes-methods ~super-methods
-        :init ~'initialize
-        :post-init ~'post-initialize
-        :constructors {[IInventory IInventory] []}
-        :state ~'data
-        :implements ~interfaces)
-       (def ~class-name ~fullname)
-       (import ~fullname)
-       (defn ~(symbol (str prefix "initialize"))
-         ([]
-          [[] {}])
-         ([~'player-inventory ~'bound-inventory]
-          [[] {:player-inventory ~'player-inventory
-               :bound-inventory ~'bound-inventory}]))
-       (defn ~(symbol (str prefix "post-initialize"))
-         ([~this-sym]
-          nil)
-         ([~this-sym ~'player-inventory ~'bound-inventory]
-          ~(if slots
-             `(add-slots ~this-sym ~'bound-inventory ~slots))
-          ~(if inventory?
-             `(add-player-inventory ~this-sym ~'player-inventory))
-          ~(if hotbar?
-             `(add-player-hotbar ~this-sym ~'player-inventory)))))))
+       (defclass Container ~name-ns ~class-name ~classdata)
+       (with-prefix ~prefix
+         (defn ~'initialize
+           ([]
+            [[] {}])
+           ([~'player-inventory ~'bound-inventory]
+            [[] {:player-inventory ~'player-inventory
+                 :bound-inventory ~'bound-inventory}]))
+         (defn ~'post-initialize
+           ([~this-sym]
+            nil)
+           ([~this-sym ~'player-inventory ~'bound-inventory]
+            ~(if slots
+               `(add-slots ~this-sym ~'bound-inventory ~slots))
+            ~(if inventory?
+               `(add-player-inventory ~this-sym ~'player-inventory))
+            ~(if hotbar?
+               `(add-player-hotbar ~this-sym ~'player-inventory))))))))
 
 (defn open-gui
   "Given a player, an instance of the mod, a gui's id, the current world, x, y, and z, attempts to open a gui."

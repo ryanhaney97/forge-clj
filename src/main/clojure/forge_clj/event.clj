@@ -1,7 +1,7 @@
 (ns forge-clj.event
   "Contains macros and functions for creating an event handler."
   (:require
-   [forge-clj.core :refer [gen-classname]]
+   [forge-clj.core :refer [get-fullname]]
    [clojure.string :as string])
   (:import
    [cpw.mods.fml.common.eventhandler SubscribeEvent]))
@@ -20,10 +20,10 @@
                                                   `[])}) [~event] ~'void]))
 
 (defmacro gen-events
-  "Creates an event handler given the namespace, handler name, and a series of arguments representing the events
+  "MACRO: Creates an event handler given the namespace, handler name, and a series of arguments representing the events
   to be handled."
   [name-ns handler-name & args]
-  (let [fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname handler-name)))
+  (let [fullname (get-fullname name-ns handler-name)
         events (apply hash-map args)
         signitures (mapv gen-event-signiture events)
         prefix (str handler-name "-")]
