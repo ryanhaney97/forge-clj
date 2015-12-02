@@ -29,12 +29,20 @@
   [k]
   (symbol (str "." (gen-method (str "set-" (name k))))))
 
+(defn handle-inner-classes [s]
+  (let [class-name (string/split s #"\.")
+        second-part (apply str (string/capitalize (first (second class-name))) (rest (second class-name)))]
+    (str (first class-name) "$" second-part)))
+
 (defn gen-classname
   "Given a symbol, returns a symbol representing a class name for java by capitalizing all words."
   [s]
   (let [s (str s)
         words (string/split s #"-")
-        class-name (apply str (map string/capitalize words))]
+        class-name (apply str (map string/capitalize words))
+        class-name (if (.contains (str class-name) ".")
+                     (handle-inner-classes class-name)
+                     class-name)]
     (symbol class-name)))
 
 (defn get-fullname [name-ns class-name]
