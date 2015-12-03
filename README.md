@@ -20,6 +20,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 
 ##Downloads
 
+- Version 0.5.1: [forge-clj](http://bit.ly/1PAHtpQ "forge-clj Version 0.5.1") [forge-clj devkit](http://bit.ly/1OJpv19 "forge-clj devkit Version 0.5.1")
+
 - Version 0.5.0: [forge-clj](http://bit.ly/1GREeYa "forge-clj Version 0.5.0") [forge-clj devkit](http://bit.ly/1GREcQ4 "forge-clj devkit Version 0.5.0")
 
 - Version 0.4.1: [forge-clj](http://bit.ly/1WZdeNA "forge-clj Version 0.4.1") [forge-clj devkit](http://bit.ly/1YgDtfB "forge-clj devkit Version 0.4.1")
@@ -35,6 +37,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 - Version 0.2.0: [forge-clj](http://bit.ly/1FTJ5HO "forge-clj Version 0.2.0") [forge-clj devkit](http://bit.ly/1jOENra "forge-clj devkit Version 0.2.0")
 
 ##Changelog
+
+- Version 0.5.1: Added docstrings to the code. Also added 2 new useful macros: defclass and with-prefix. Also rearranged the namespaces a bit. The deftab macro is now in forge-clj.items, and many of the more utility-based functions in the core (gen-classname, get-fullname, etc.) are now in forge-clj.util. I also added a new namespace called forge-clj.registry, that contains all of the register functions and such (except for the network stuff). Also made forge-clj.client.registry, which is the same, but is for the client side.
 
 - Version 0.5.0: Added REPL support. To use it, first add the :repl keyword to the defmod macro, and set it to your port number or set it to true to use the default port of 7888. Then just connect to it with another tool (if using leiningen do "lein repl :connect \<portnumber\>"). Also finished adding support for GUIs (with inventory).
 
