@@ -1,26 +1,36 @@
 (ns forge-clj.items
+  "Contains macros for creating Items and specific types of Items."
   (:require
    [forge-clj.core :refer [defobj]])
   (:import
    [java.util Random]
    [net.minecraft.block Block BlockContainer]
    [net.minecraft.block.material Material]
+   [net.minecraft.creativetab CreativeTabs]
    [net.minecraft.item Item ItemArmor ItemFood ItemSword ItemPickaxe ItemAxe ItemSpade ItemHoe]
    [net.minecraftforge.common.util EnumHelper]))
 
-;Given the name of an item, and a series of keywords and values representing the properties of the item,
-;generates an Item object with the specified properties. Methods can be overriden using the :override keyword.
-(defmacro defitem [item-name & args]
+(defmacro deftab
+  "DEFOBJ: Creates an anonymous instance of CreativeTabs."
+  [tab-name & args]
+  (let [obj-data (apply hash-map args)]
+    `(defobj CreativeTabs [~(str tab-name)] ~tab-name ~obj-data)))
+
+(defmacro defitem
+  "DEFOBJ: Creates an anonymous instance of an Item with the specified properties."
+  [item-name & args]
   (let [itemdata (apply hash-map args)]
     `(defobj Item [] ~item-name ~itemdata)))
 
-;Given the respective arguments, creates a tool material.
-(defmacro deftoolmaterial [material-name harvest-level durability mining-speed damage enchantability]
+(defmacro deftoolmaterial
+  "MACRO: Creates a tool material."
+  [material-name harvest-level durability mining-speed damage enchantability]
   `(def ~material-name (EnumHelper/addToolMaterial ~(str material-name) ~harvest-level ~durability ~(float mining-speed) ~(float damage) ~enchantability)))
 
-;Given the resepctive arguments, creates a tool. Requires a previously defined tool material,
-;as well as the type of the tool.
-(defmacro deftool [item-name material tooltype & args]
+(defmacro deftool
+  "DEFOBJ: Creates an anonymous instance of a tool.
+  Additionally requires a toolmaterial and a keyword representing the tool's type (or a class representing an Item's tool that takes a material in its constructor) to be passed in after the name."
+  [item-name material tooltype & args]
   (let [itemdata (apply hash-map args)
         tool (condp = tooltype
                :sword `ItemSword
@@ -32,8 +42,9 @@
                tooltype)]
     `(defobj ~tool [~material] ~item-name ~itemdata)))
 
-;Given the respective arguments, creates an armor material.
-(defmacro defarmormaterial [material-name durability damage-reduction enchantability]
+(defmacro defarmormaterial
+  "MACRO: Creates an armor material. The third argument for damage-reduction can be either a map or a vector (if vector it goes in the order of helmet, chest, legs, boots)."
+  [material-name durability damage-reduction enchantability]
   (let [damage-reduction (if (map? damage-reduction) [(:helmet damage-reduction)
                                                       (:chestplate damage-reduction)
                                                       (:leggings damage-reduction)
@@ -42,7 +53,14 @@
 
 ;Given the respective arguments, creates a piece of armor. Requires a previously defined armor material,
 ;as well as the piece of armor.
-(defmacro defarmor [item-name material armortype & args]
+(defmacro defarmor
+  "DEFOBJ: Creates an anonymous instance of an ItemArmor.
+  Additionally requires an armormaterial and a keyword representing the armor's type (or the respective number) to be passed in after the name.
+
+  The following keyword is treated specially:
+
+  :renderindex - specifies the render index passed to the constructor of the armor. Defaults to 0."
+  [item-name material armortype & args]
   (let [itemdata (apply hash-map args)
         renderindex (if (:renderindex itemdata) (:renderindex itemdata) 0)
         itemdata (dissoc itemdata :renderindex)
@@ -54,8 +72,13 @@
                 armortype)]
     `(defobj ItemArmor [~material ~renderindex ~armor] ~item-name ~itemdata)))
 
-;Given the respective arguments, creates food.
-(defmacro deffood [item-name heal-amount saturation-modifier & args]
+(defmacro deffood
+  "DEFOBJ: Creates an anonymous instance of an ItemFood.
+
+  The following keyword is treated specially:
+
+  :wolves-favorite? - specifies if this is a wolves favorite, that is passed to the constructor. Defaults to false."
+  [item-name heal-amount saturation-modifier & args]
   (let [itemdata (apply hash-map args)
         wolves-favorite? (some? (:wolves-favorite? itemdata))
         itemdata (dissoc itemdata :wolves-favorite?)]
