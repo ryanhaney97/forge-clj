@@ -2,10 +2,10 @@
   "Contains macros and functions related to entities and extended entity properties."
   (:require
    [forge-clj.nbt :refer [read-tag-data! write-tag-data!]]
-   [forge-clj.core :refer [defassocclass get-fullname with-prefix]]
+   [forge-clj.core :refer [defassocclass]]
+   [forge-clj.util :refer [get-fullname with-prefix]]
    [clojure.string :as string])
   (:import
-   [net.minecraft.entity Entity]
    [net.minecraftforge.common IExtendedEntityProperties]))
 
 ;Creates a class used to store extended properties.
@@ -36,13 +36,3 @@
            (write-tag-data! (~'.-data ~this-sym) ~'compound))
          (defn ~'init [~'this ~'entity ~'world]
            nil)))))
-
-(defn get-extended-properties
-  "Gets the extended entity properties from the specified entity with the provided string id."
-  [^Entity entity id]
-  (.getExtendedProperties entity (str id)))
-
-(defn register-extended-properties
-  "Takes and Entity and an id and registers extended entity properties on it."
-  [^Entity entity id ^IExtendedEntityProperties properties]
-  (.registerExtendedProperties entity (str id) properties))

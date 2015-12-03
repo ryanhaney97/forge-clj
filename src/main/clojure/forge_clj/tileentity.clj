@@ -2,13 +2,13 @@
   "Contains macros and functions related to Tile Entities."
   (:require
    [forge-clj.nbt :refer [read-tag-data! write-tag-data! map->nbt nbt->map]]
-   [forge-clj.core :refer [defassocclass get-fullname with-prefix]]
+   [forge-clj.core :refer [defassocclass]]
+   [forge-clj.util :refer [get-fullname with-prefix]]
    [clojure.string :as string])
   (:import
    [net.minecraft.nbt NBTTagCompound]
    [net.minecraft.tileentity TileEntity]
-   [net.minecraft.network.play.server S35PacketUpdateTileEntity]
-   [net.minecraft.world World]))
+   [net.minecraft.network.play.server S35PacketUpdateTileEntity]))
 
 (defmacro deftileentity
   "DEFASSOCCLASS: Creates a Tile Entity class.
@@ -44,8 +44,3 @@
            (S35PacketUpdateTileEntity. (.-xCoord ~this-sym) (.-yCoord ~this-sym) (.-zCoord ~this-sym) 1 (map->nbt (select-keys (deref (~'.-data ~this-sym)) ~sync-data) (NBTTagCompound.))))
          (defn ~'onDataPacket [~'this ~'network-manager ~(with-meta 'packet `{:tag S35PacketUpdateTileEntity})]
            (swap! (~'.-data ~this-sym) merge (nbt->map (.func_148857_g ~'packet))))))))
-
-(defn get-tile-entity-at
-  "Gets the tile entity in the world at the specified coordinates. For convenience."
-  [^World world x y z]
-  (.getTileEntity world (int x) (int y) (int z)))

@@ -9,8 +9,7 @@
    [net.minecraft.client Minecraft]
    [net.minecraft.client.renderer.tileentity TileEntitySpecialRenderer]
    [net.minecraft.client.model ModelBase ModelRenderer]
-   [org.lwjgl.opengl GL11]
-   [cpw.mods.fml.client.registry ClientRegistry]))
+   [org.lwjgl.opengl GL11]))
 
 (defn model-renderer
   "Function that takes a model-map and creates a ModelRenderer object. If memo-test? is set to true, will print to console every time it is called."
@@ -100,8 +99,3 @@
     `(do
        (def ~(symbol (str renderer-name "-model-obj")) (proxy [ModelBase] []))
        (defobj TileEntitySpecialRenderer [] ~renderer-name ~options))))
-
-(defn bind-tile-renderer
-  "Given a tile entity class and an instance of a TileEntitySpecialRenderer, binds the renderer to the tile entity."
-  [^Class tile-entity-class ^TileEntitySpecialRenderer renderer]
-  (ClientRegistry/bindTileEntitySpecialRenderer tile-entity-class renderer))

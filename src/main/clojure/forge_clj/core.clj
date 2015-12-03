@@ -4,68 +4,22 @@
   (:require
    [clojure.string :as string]
    [clojure.set :as cset]
+   [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix]]
    [clojure.tools.nrepl.server :refer [start-server]])
   (:import
-   [net.minecraft.block Block]
-   [net.minecraft.item Item]
-   [net.minecraftforge.common MinecraftForge]
-   [cpw.mods.fml.common.registry GameRegistry]
-   [cpw.mods.fml.common Mod Mod$EventHandler FMLCommonHandler IWorldGenerator]
+   [cpw.mods.fml.common Mod Mod$EventHandler FMLCommonHandler]
    [cpw.mods.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
 (declare client?)
-
-(defn gen-method
-  "Given a key word, returns a java method as a symbol by capitalizing all but the first word."
-  [k]
-  (let [key-name (name k)
-        words (string/split key-name #"-")
-        method-name (apply str (first words) (map string/capitalize (rest words)))]
-    (symbol method-name)))
-
-(defn gen-setter
-  "Given a key word, returns a setter java method as a symbol by adding a prefix,
-  and capitalizing the remaining words."
-  [k]
-  (symbol (str "." (gen-method (str "set-" (name k))))))
-
-(defn handle-inner-classes [s]
-  (let [class-name (string/split s #"\.")
-        second-part (apply str (string/capitalize (first (second class-name))) (rest (second class-name)))]
-    (str (first class-name) "$" second-part)))
-
-(defn gen-classname
-  "Given a symbol, returns a symbol representing a class name for java by capitalizing all words."
-  [s]
-  (let [s (str s)
-        words (string/split s #"-")
-        class-name (apply str (map string/capitalize words))
-        class-name (if (.contains (str class-name) ".")
-                     (handle-inner-classes class-name)
-                     class-name)]
-    (symbol class-name)))
-
-(defn get-fullname [name-ns class-name]
-  (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name))))
-
-(defmacro with-prefix [prefix & defs]
-  (let [per-def (fn [possible-def]
-                  (if (or (= (first possible-def) 'def) (= (first possible-def) 'defn) (= (first possible-def) 'def-) (= (first possible-def) 'defn-) (= (first possible-def) `def) (= (first possible-def) `defn) (= (first possible-def) `def-) (= (first possible-def) `defn-))
-                    (let [first-val (first possible-def)
-                          def-name (second possible-def)
-                          def-name (symbol (str prefix def-name))
-                          def-statement (cons first-val (cons def-name (rest (rest possible-def))))]
-                      def-statement)
-                    possible-def))
-        def-statements (cons `do (map per-def defs))]
-    def-statements))
 
 (defmacro defmod
   "MACRO: Takes the current user namespace, the name of the mod, the version, and a rest argument evaled as a map.
   Using these things, constructs a class for the mod, with the proper annotations and such.
   Proxies can optionally be included via the rest argument, with :common and :client.
   When including a proxy, DO NOT REQUIRE THE NAMESPACE, and instead use the FULL NAMESPACE NAME.
-  This will allow forge-clj to include the client namespaces only if run on an integrated client."
+  This will allow forge-clj to include the client namespaces only if run on an integrated client.
+  The :repl keyword can also be used to start a nrepl. If :repl is 'true', it'll use the default value
+  of 7888 as the port. Otherwise, if :repl is a number, it'll use that number as the port instead."
   [name-ns mod-name version & proxies]
   (let [proxies (apply hash-map proxies)
         commonproxy (get proxies :common {})
@@ -158,45 +112,33 @@
 (defmacro defobj
   "MACRO: same as genobj, but takes a name (as the third argument), and stores the resulting instance in a def with that name.
   Other macros using this will have DEFOBJ: in their docs, instead of MACRO:.
-  Realize that those using defobj are indeed macros as well."
+  Realize that other things using defobj in forge-clj are macros as well unless specified otherwise."
   [superclass constructor-args obj-name objdata]
   `(def ~obj-name (genobj ~superclass ~constructor-args ~objdata)))
 
-(defmulti register
-  "Multimethod consisting of a series of register functions. Handles the following arguments:
-  (block-object, name): registers block with specified name.
-  (item-object, name): registers item with specified name.
-  (block-object, name, blockitem): registers block with specified name and blockitem object.
-  (world-generator): registers a world generator.
-  (world-generator, priority): registers a world generator with the specified priority."
-  (fn [element & args] [(count args) (type element)]))
-(defmethod register [1 Block] [element forge-name]
-  (GameRegistry/registerBlock element forge-name)
-  element)
-(defmethod register [1 Item] [element forge-name]
-  (GameRegistry/registerItem element forge-name)
-  element)
-(defmethod register [2 Block] [element forge-name blockitem]
-  (GameRegistry/registerBlock element nil forge-name (object-array []))
-  (GameRegistry/registerItem blockitem forge-name)
-  element)
-(defmethod register [0 IWorldGenerator] [generator]
-  (register generator 0))
-(defmethod register [1 IWorldGenerator] [generator mod-priority]
-  (GameRegistry/registerWorldGenerator generator mod-priority))
-
-(defn register-tile-entity
-  "Registers a Tile Entity with the specified id"
-  [entity id]
-  (GameRegistry/registerTileEntity entity id))
-
-(defn register-events
-  "Registers an Event Handler."
-  [handler]
-  (.register (.bus (FMLCommonHandler/instance)) handler)
-  (.register MinecraftForge/EVENT_BUS handler))
-
 (defmacro defclass
+  "MACRO: Given a superclass (optional), a namespace name, a class name,
+  and a map of classdata, creates a Java class using Clojure's gen-class function.
+  This new class will have a name as specified by gen-classname, and a full package name as specified by get-fullname.
+  The full package name will be stored in a def with a name equal to the class name provided.
+  The new class will also be imported,
+  so you can reference it by its classname from gen-class in your code.
+  Macros using this within forge-clj will be labeled with DEFCLASS: in their documentation rather than MACRO:.
+  They are still macros unless specified otherwise.
+
+  The following keywords are valid classdata (most of these are explained in detail in Clojure's gen-class documentation):
+
+  :implements/:interfaces - should have a vector containing interfaces for this class to implement.
+  :exposes-methods/:expose/:expose-methods - should have a map with the key being the desired method, and the value being the new name for a method that can be called to execute the super method.
+  :expose-fields/:exposes - creates a public access field in this class that redirects to another field. Can be used to make private/protected values public.
+  :constructors - map of constructors. The key is a vector of types for the constructor to recieve. The value is an associated super constructor if applicable (if not, just use an empty vector).
+  :init - name of an initializing function called with arguements to each created constructor.
+  :post-init - similar to :init, but specifies a function that is called after the object is already constructed and is passed an instance of the newly-constructed object.
+  :methods - creates methods using a vector of vectors. Each vector contains a name, a vector of arguement types, and a return type (or void). Not needed if this method is defined in a superclass/interface, such methods are already made.
+  :state - name of a public final field unique to each object. While final, it CAN be an atom if you want.
+  :factory - see Clojure's documentation for gen-class.
+  :impl-ns - see Clojure's documentation for gen-class.
+  :load-impl-ns - see Clojure's documentation for gen-class."
   ([superclass name-ns class-name classdata]
    (let [classdata (cset/rename-keys classdata {:expose-fields :exposes
                                                 :expose :exposes-methods
@@ -223,7 +165,7 @@
   For example, data can be obtained via (:keyword class-instance), or (get class-instance :keyword).
   Data can also be changed via the assoc! function. Remember to include the exclaimation point!
   Other macros using this will have DEFASSOCCLASS: in their docs instead of MACRO:.
-  This also means that those labeled as using this macro are also macros."
+  This also means that those labeled as using this macro are also macros unless specified otherwise."
   ([superclass name-ns class-name classdata]
    (let [classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
                      :init 'initialize

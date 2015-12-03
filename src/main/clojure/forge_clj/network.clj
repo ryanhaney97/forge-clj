@@ -3,7 +3,8 @@
   and related network implementations."
   (:require
    [forge-clj.nbt :refer [nbt->map map->nbt]]
-   [forge-clj.core :refer [get-fullname with-prefix defclass]]
+   [forge-clj.core :refer [defclass]]
+   [forge-clj.util :refer [get-fullname with-prefix]]
    [clojure.string :as string])
   (:import
    [net.minecraft.nbt NBTTagCompound]
@@ -61,12 +62,13 @@
            (~on-message (deref (.-data ~(with-meta 'message `{:tag NbtPacket}))) ~'context))))))
 
 (defn create-network
-  "Creates a network given the network name."
+  "Creates a network (aka a SimpleNetworkWrapper) given the network name."
   [network-name]
   (.newSimpleChannel NetworkRegistry/INSTANCE network-name))
 
 (defn register-message
-  "Registers a network message given a network, a packet handler, an id, and a side."
+  "Registers a network message given a network, a packet handler, an id (as a number),
+  and a side (which can be either a keyword of :client or :server, or a Side)."
   [^SimpleNetworkWrapper network ^Class handler id side]
   (let [^Side network-side (if (= side :client)
                              Side/CLIENT

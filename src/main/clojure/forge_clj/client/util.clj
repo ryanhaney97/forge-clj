@@ -1,8 +1,7 @@
 (ns forge-clj.client.util
   "Contains a series of useful functions. Client side only."
   (:require
-   [forge-clj.tileentity :refer [get-tile-entity-at]]
-   [forge-clj.util :refer [server-worlds]])
+   [forge-clj.util :refer [server-worlds get-tile-entity-at]])
   (:import
    [net.minecraft.client.renderer.texture TextureManager]
    [net.minecraft.client Minecraft]

@@ -1,7 +1,8 @@
 (ns forge-clj.ui
   "Contains macros and methods involving uis and guis."
   (:require
-   [forge-clj.core :refer [get-fullname defclass with-prefix]])
+   [forge-clj.core :refer [defclass]]
+   [forge-clj.util :refer [get-fullname with-prefix]])
   (:import
    [cpw.mods.fml.common.network IGuiHandler NetworkRegistry]
    [net.minecraft.inventory Container Slot IInventory]
@@ -17,11 +18,6 @@
                                                (~server-fn ~'id ~'player ~'world ~'x ~'y ~'z))
                         (~'getClientGuiElement [~'this ~'id ~'player ~'world ~'x ~'y ~'z]
                                                (~client-fn ~'id ~'player ~'world ~'x ~'y ~'z)))))
-
-(defn register-gui-handler
-  "Registers a gui handler for the specified mod instance."
-  [mod-instance handler]
-  (.registerGuiHandler ^NetworkRegistry (NetworkRegistry/INSTANCE) mod-instance handler))
 
 (defn add-slot-to-container
   "Given a container, an inventory, a slot number, and a slot x and y, adds a Slot to the provided Container."
@@ -64,8 +60,8 @@
 
 (defmacro defcontainer
   "DEFCLASS: Given a namespace, a name, and some classdata, creates a Container class.
-  The constructor for this class takes an instance of the player's inventory, and an instance of the bound inventory respectively.
-
+  The constructor for this class takes an instance of the player's inventory, and an instance of the bound inventory, respectively.
+  If both player-hotbar? and player-inventory? are not true, you can pass in nil safely as the player inventory instead.
   The following keywords are treated specially:
 
   :player-hotbar? - if true, adds the player's hotbar slots to the container.
@@ -99,8 +95,3 @@
                `(add-player-inventory ~this-sym ~'player-inventory))
             ~(if hotbar?
                `(add-player-hotbar ~this-sym ~'player-inventory))))))))
-
-(defn open-gui
-  "Given a player, an instance of the mod, a gui's id, the current world, x, y, and z, attempts to open a gui."
-  [^EntityPlayer player mod-instance id world x y z]
-  (.openGui player mod-instance id world x y z))

@@ -8,7 +8,8 @@
    [cpw.mods.fml.common.registry GameRegistry]))
 
 (defn convert-recipe
-  "Converts a shaped recipe specified in the addrecipe function, into an object array to be passed to the registry."
+  "Converts a shaped recipe specified in the addrecipe function,
+  into an object array to be passed to the registry."
   [recipe]
   (let [layout (:layout recipe)
         layout (string/replace layout #"_" " ")
@@ -20,7 +21,8 @@
     (object-array (concat layout bindings))))
 
 (defn convert-shapeless-recipe
-  "Converts a shapeless recipe specified in the addrecipe function, into an object array to be passed to the registry."
+  "Converts a shapeless recipe specified in the addrecipe function,
+  into an object array to be passed to the registry."
   [recipe]
   (let [items (:items recipe)
         per-item (fn [imap]

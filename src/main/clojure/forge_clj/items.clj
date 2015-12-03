@@ -6,8 +6,15 @@
    [java.util Random]
    [net.minecraft.block Block BlockContainer]
    [net.minecraft.block.material Material]
+   [net.minecraft.creativetab CreativeTabs]
    [net.minecraft.item Item ItemArmor ItemFood ItemSword ItemPickaxe ItemAxe ItemSpade ItemHoe]
    [net.minecraftforge.common.util EnumHelper]))
+
+(defmacro deftab
+  "DEFOBJ: Creates an anonymous instance of CreativeTabs."
+  [tab-name & args]
+  (let [obj-data (apply hash-map args)]
+    `(defobj CreativeTabs [~(str tab-name)] ~tab-name ~obj-data)))
 
 (defmacro defitem
   "DEFOBJ: Creates an anonymous instance of an Item with the specified properties."

@@ -3,13 +3,12 @@
   Available to both Client and Server."
   (:require
    [clojure.string :as string]
-   [clojure.set :as cset]
-   [forge-clj.core :refer [defobj]])
+   [clojure.set :as cset])
   (:import
    [java.util Random]
    [net.minecraft.block Block]
    [net.minecraft.item Item ItemStack]
-   [net.minecraft.creativetab CreativeTabs]
+   [net.minecraft.entity Entity]
    [net.minecraft.entity.player EntityPlayer]
    [net.minecraft.entity.item EntityItem]
    [net.minecraft.util ChatComponentText Vec3 MovingObjectPosition]
@@ -17,6 +16,75 @@
    [net.minecraft.server MinecraftServer]
    [net.minecraft.world World]
    [cpw.mods.fml.common.registry GameRegistry]))
+
+(defn gen-method
+  "Given a key word, returns a java method as a symbol by capitalizing all but the first word."
+  [k]
+  (let [key-name (name k)
+        words (string/split key-name #"-")
+        method-name (apply str (first words) (map string/capitalize (rest words)))]
+    (symbol method-name)))
+
+(defn gen-setter
+  "Given a key word, returns a setter java method as a symbol by adding a prefix,
+  and capitalizing the remaining words."
+  [k]
+  (symbol (str "." (gen-method (str "set-" (name k))))))
+
+(defn handle-inner-classes
+  "Helper function for gen-classname to handle changing '.'s into '$'s"
+  [s]
+  (let [class-name (string/split s #"\.")
+        second-part (apply str (string/capitalize (first (second class-name))) (rest (second class-name)))]
+    (str (first class-name) "$" second-part)))
+
+(defn gen-classname
+  "Given a symbol, returns a symbol representing a class name for java by capitalizing all words.
+  Also turns '.'s into '$'s (in other words a '.' is used for inner classes)."
+  [s]
+  (let [s (str s)
+        words (string/split s #"-")
+        class-name (apply str (map string/capitalize words))
+        class-name (if (.contains (str class-name) ".")
+                     (handle-inner-classes class-name)
+                     class-name)]
+    (symbol class-name)))
+
+(defn get-fullname
+  "Given a namespace name and a class name, returns a fully qualified package name for
+  a java class by using gen-classname on the class name and turning '-'s into '_'s in the package."
+  [name-ns class-name]
+  (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname class-name))))
+
+(defmacro with-prefix
+  "Useful macro that takes a prefix (both strings and symbols work) and any number of statements.
+  For each def/defn/def-/defn- statement within the macro, adds the prefix onto the name in each statement."
+  [prefix & defs]
+  (let [per-def (fn [possible-def]
+                  (if (or (= (first possible-def) 'def) (= (first possible-def) 'defn) (= (first possible-def) 'def-) (= (first possible-def) 'defn-) (= (first possible-def) `def) (= (first possible-def) `defn) (= (first possible-def) `def-) (= (first possible-def) `defn-))
+                    (let [first-val (first possible-def)
+                          def-name (second possible-def)
+                          def-name (symbol (str prefix def-name))
+                          def-statement (cons first-val (cons def-name (rest (rest possible-def))))]
+                      def-statement)
+                    possible-def))
+        def-statements (cons `do (map per-def defs))]
+    def-statements))
+
+(defn get-tile-entity-at
+  "Gets the tile entity in the world at the specified coordinates. For convenience."
+  [^World world x y z]
+  (.getTileEntity world (int x) (int y) (int z)))
+
+(defn get-extended-properties
+  "Gets the extended entity properties from the specified entity with the provided string id."
+  [^Entity entity id]
+  (.getExtendedProperties entity (str id)))
+
+(defn open-gui
+  "Given a player, an instance of the mod, a gui's id, the current world, x, y, and z, attempts to open a gui."
+  [^EntityPlayer player mod-instance id world x y z]
+  (.openGui player mod-instance id world x y z))
 
 (defn server-worlds
   "Gets an array of server-side worlds currently used."
@@ -81,12 +149,6 @@
      (memoize
       (fn ~arg-vector
         ~@args))))
-
-(defmacro deftab
-  "DEFOBJ: Creates an anonymous instance of CreativeTabs."
-  [tab-name & args]
-  (let [obj-data (apply hash-map args)]
-    `(defobj CreativeTabs [~(str tab-name)] ~tab-name ~obj-data)))
 
 (defn get-item
   "Given the mod-id and the item name separated by a :,
