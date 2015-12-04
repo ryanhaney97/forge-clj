@@ -1,4 +1,5 @@
 #forge-clj: Clojure in Minecraft
+[![Build Status](https://travis-ci.org/Immortalin/forge-clj.svg)](https://travis-ci.org/Immortalin/forge-clj)
 
 ##Description
 
