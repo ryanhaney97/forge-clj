@@ -4,7 +4,7 @@
 
 A WIP implementation of Clojure working with Minecraft Forge. This is now somewhat useable!
 
-Explaining everything here would be a hassle, so go look at the [test-mod](https://github.com/yoshiquest/test-mod "test-mod") I made. It assumes you already know Clojure for some things. I plan on making a separate tutorial on Clojure itself and using it with forge-clj later though.
+I now have a tutorial! It's still a work in progress, but it's [here](https://github.com/yoshiquest/forge-clj/wiki "Tutorials"). A [test-mod](https://github.com/yoshiquest/test-mod "test-mod") also exists, which I use for making sure everything works, so there should be an example for everything currently implemented in there.
 
 ##Usage (for users)
 
