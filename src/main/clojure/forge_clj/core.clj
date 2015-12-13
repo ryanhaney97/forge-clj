@@ -7,6 +7,7 @@
    [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix]]
    [clojure.tools.nrepl.server :refer [start-server]])
   (:import
+   [java.lang.reflect Field]
    [cpw.mods.fml.common Mod Mod$EventHandler FMLCommonHandler]
    [cpw.mods.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
@@ -20,11 +21,12 @@
   This will allow forge-clj to include the client namespaces only if run on an integrated client.
   The :repl keyword can also be used to start a nrepl. If :repl is 'true', it'll use the default value
   of 7888 as the port. Otherwise, if :repl is a number, it'll use that number as the port instead."
-  [name-ns mod-name version & proxies]
-  (let [proxies (apply hash-map proxies)
-        commonproxy (get proxies :common {})
-        clientproxy (get proxies :client {})
-        repl (get proxies :repl)
+  [mod-name version & options]
+  (let [options (apply hash-map options)
+        name-ns (get options :ns *ns*)
+        commonproxy (get options :common {})
+        clientproxy (get options :client {})
+        repl (get options :repl)
         repl (if (true? repl)
                7888
                repl)
@@ -35,7 +37,7 @@
                     (get commonproxy :pre-init (get commonproxy :init (get commonproxy :post-init nil))))
         common-ns (if common-ns (first (string/split (str common-ns) #"/")) nil)
         prefix (str mod-name "-")
-        fullname (symbol (str (string/replace name-ns #"-" "_") "." (gen-classname mod-name)))]
+        fullname (get-fullname name-ns mod-name)]
     `(do
        (gen-class
         :name ~(with-meta fullname `{Mod {:name ~(str (gen-classname mod-name)) :modid ~(str mod-name) :version ~(str version)}})
@@ -72,52 +74,8 @@
              ~(when (:post-init clientproxy)
                 `(~(:post-init clientproxy) ~'this ~'event))))))))
 
-(defmacro genobj
-  "MACRO: General purpose macro used to extend objects. Takes the superclass, constructor arguments (as a vector), the name,
-  and the data (as a map), to create an instance of an anonymous class that extends the provided superclass.
-  The data given will be converted to a java setter that will be called on the resulting object
-  (for example, :block-name \"name\" becomes .setBlockName(\"name\")).
-  Multiple arguments can be specified using a vector.
-
-  This occurs unless one of the following special keywords is used:
-
-  :override - should contain a map of method-names (as keywords, such as :set-block, which results in .setBlock) and functions to override them.
-  :interfaces - makes the object implement the provided interfaces, contained in a vector. Interface methods must be overriden via :override.
-  :calls - map of calls on the final object. Differs from normal since you can specify methods without the word set in front of them."
-  [superclass constructor-args objdata]
-  (let [overrides (:override objdata)
-        override-methods (when overrides (map gen-method (keys overrides)))
-        override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
-        override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
-        interfaces (:interfaces objdata)
-        method-calls (:calls objdata)
-        objdata (dissoc objdata :override :interfaces :calls)
-        setters (map gen-setter (keys objdata))
-        calls (map #(if (vector? %2)
-                      (apply list %1 %2)
-                      (list %1 %2)) setters (vals objdata))
-        method-calls (map #(if (vector? (val %1))
-                             (apply list (symbol (str "." (gen-method (key %1)))) (val %1))
-                             (list (symbol (str "." (gen-method (key %1)))) (val %1))) method-calls)
-        super-vector (if interfaces (concat [superclass] interfaces) [superclass])]
-    (if overrides
-      `(doto (proxy ~super-vector ~constructor-args
-               ~@override-calls)
-         ~@calls
-         ~@method-calls)
-      `(doto (proxy ~super-vector ~constructor-args)
-         ~@calls
-         ~@method-calls))))
-
-(defmacro defobj
-  "MACRO: same as genobj, but takes a name (as the third argument), and stores the resulting instance in a def with that name.
-  Other macros using this will have DEFOBJ: in their docs, instead of MACRO:.
-  Realize that other things using defobj in forge-clj are macros as well unless specified otherwise."
-  [superclass constructor-args obj-name objdata]
-  `(def ~obj-name (genobj ~superclass ~constructor-args ~objdata)))
-
 (defmacro defclass
-  "MACRO: Given a superclass (optional), a namespace name, a class name,
+  "MACRO: Given a superclass (optional), a class name,
   and a map of classdata, creates a Java class using Clojure's gen-class function.
   This new class will have a name as specified by gen-classname, and a full package name as specified by get-fullname.
   The full package name will be stored in a def with a name equal to the class name provided.
@@ -139,8 +97,9 @@
   :factory - see Clojure's documentation for gen-class.
   :impl-ns - see Clojure's documentation for gen-class.
   :load-impl-ns - see Clojure's documentation for gen-class."
-  ([superclass name-ns class-name classdata]
-   (let [classdata (cset/rename-keys classdata {:expose-fields :exposes
+  ([superclass class-name classdata]
+   (let [name-ns (get classdata :ns *ns*)
+         classdata (cset/rename-keys classdata {:expose-fields :exposes
                                                 :expose :exposes-methods
                                                 :expose-methods :exposes-methods
                                                 :interfaces :implements})
@@ -156,18 +115,70 @@
          ~@classdata)
         (def ~class-name ~fullname)
         (import ~fullname))))
-  ([name-ns class-name classdata]
-   `(defclass nil ~name-ns ~class-name ~classdata)))
+  ([class-name classdata]
+   `(defclass nil ~class-name ~classdata)))
+
+(defmacro genobj
+  "MACRO: General purpose macro used to extend objects. Takes the superclass, constructor arguments (as a vector), the name,
+  and the data (as a map), to create an instance of an anonymous class that extends the provided superclass.
+  The data given will be converted to a java setter that will be called on the resulting object
+  (for example, :block-name \"name\" becomes .setBlockName(\"name\")).
+  Multiple arguments can be specified using a vector.
+
+  This occurs unless one of the following special keywords is used:
+
+  :override - should contain a map of method-names (as keywords, such as :set-block, which results in .setBlock) and functions to override them.
+  :interfaces - makes the object implement the provided interfaces, contained in a vector. Interface methods must be overriden via :override.
+  :calls - map of calls on the final object. Differs from normal since you can specify methods without the word set in front of them."
+  [superclass constructor-args objdata]
+  (let [overrides (:override objdata)
+        override-methods (when overrides (map gen-method (keys overrides)))
+        override-calls (if overrides (map #(list apply %1 'args) (vals overrides)))
+        override-calls (if overrides (map #(list %1 ['& 'args] %2) override-methods override-calls))
+        interfaces (:interfaces objdata)
+        method-calls (:calls objdata)
+        fields (:fields objdata)
+        objdata (dissoc objdata :override :interfaces :calls :fields)
+        setters (map gen-setter (keys objdata))
+        calls (map #(if (vector? %2)
+                      (apply list %1 %2)
+                      (list %1 %2)) setters (vals objdata))
+        method-calls (map #(if (vector? (val %1))
+                             (apply list (symbol (str "." (gen-method (key %1)))) (val %1))
+                             (list (symbol (str "." (gen-method (key %1)))) (val %1))) method-calls)
+        field-calls (map (fn [field]
+                           `(fn [~'obj]
+                              (set! (~(symbol (str ".-" (gen-method (key field)))) ~(with-meta 'obj `{:tag ~superclass})) ~(val field)))) fields)
+        super-vector (if interfaces (concat [superclass] interfaces) [superclass])]
+    (if overrides
+      `(->>
+        (doto (proxy ~super-vector ~constructor-args
+                ~@override-calls)
+          ~@calls
+          ~@method-calls
+          ~@field-calls))
+      `(doto (proxy ~super-vector ~constructor-args)
+         ~@calls
+         ~@method-calls
+         ~@field-calls))))
+
+(defmacro defobj
+  "MACRO: same as genobj, but takes a name (as the third argument), and stores the resulting instance in a def with that name.
+  Other macros using this will have DEFOBJ: in their docs, instead of MACRO:.
+  Realize that other things using defobj in forge-clj are macros as well unless specified otherwise."
+  [superclass constructor-args obj-name objdata]
+  `(def ~obj-name (genobj ~superclass ~constructor-args ~objdata)))
 
 (defmacro defassocclass
-  "DEFCLASS: Creates a class with the specified superclass (optional), namespace name, class name, and classdata.
+  "DEFCLASS: Creates a class with the specified superclass (optional), class name, and classdata.
   This class implements ITransientAssociative, and as such classes created with this can be treated similarly to a hash-map.
   For example, data can be obtained via (:keyword class-instance), or (get class-instance :keyword).
   Data can also be changed via the assoc! function. Remember to include the exclaimation point!
   Other macros using this will have DEFASSOCCLASS: in their docs instead of MACRO:.
   This also means that those labeled as using this macro are also macros unless specified otherwise."
-  ([superclass name-ns class-name classdata]
-   (let [classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
+  ([superclass class-name classdata]
+   (let [name-ns (get classdata :ns *ns*)
+         classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
                      :init 'initialize
                      :state 'data)
          fields (get classdata :fields {})
@@ -175,7 +186,7 @@
          fullname (get-fullname name-ns class-name)
          this-sym (with-meta 'this {:tag fullname})]
      `(do
-        (defclass ~superclass ~name-ns ~class-name ~classdata)
+        (defclass ~superclass ~class-name ~classdata)
         (with-prefix ~prefix
           (defn ~'initialize []
             [[] (atom ~fields)])
@@ -192,8 +203,8 @@
              (get (deref (~'.-data ~this-sym)) ~'obj))
             ([~'this ~'obj ~'notfound]
              (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound)))))))
-  ([name-ns class-name classdata]
-   `(defassocclass nil ~name-ns ~class-name ~classdata)))
+  ([class-name classdata]
+   `(defassocclass nil ~class-name ~classdata)))
 
 ;Mod declaration by forge-clj
 ;----------------------------

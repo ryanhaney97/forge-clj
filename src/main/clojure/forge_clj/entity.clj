@@ -16,8 +16,9 @@
 
   :on-load - called after loading nbt data, with an instance of this passed to it.
   :on-save - called before saving nbt data, with an instance of this passed to it."
-  [name-ns class-name & args]
+  [class-name & args]
   (let [classdata (apply hash-map args)
+        name-ns (get classdata :ns *ns*)
         classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `IExtendedEntityProperties))
         prefix (str class-name "-")
         fullname (get-fullname name-ns class-name)
@@ -26,7 +27,7 @@
         on-save (get classdata :on-save `(constantly nil))
         classdata (dissoc classdata :on-load :on-save)]
     `(do
-       (defassocclass ~name-ns ~class-name ~classdata)
+       (defassocclass ~class-name ~classdata)
        (with-prefix ~prefix
          (defn ~'loadNBTData [~'this ~'compound]
            (read-tag-data! (~'.-data ~this-sym) ~'compound)

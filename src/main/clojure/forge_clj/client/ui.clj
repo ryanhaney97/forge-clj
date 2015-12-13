@@ -6,10 +6,10 @@
    [net.minecraft.client.gui.inventory GuiContainer]))
 
 (defmacro defguicontainer
-  "DEFCLASS: Given a name space, class name, and classdata, creates a class extending GuiContainer.
+  "DEFCLASS: Given a class name and classdata, creates a class extending GuiContainer.
 
   Remember to create implementations of drawGuiContainerBackgroundLayer and
   drawGuiContainerForegroundLayer or this will break!"
-  [name-ns class-name & args]
+  [class-name & args]
   (let [classdata (apply hash-map args)]
-    `(defclass GuiContainer ~name-ns ~class-name ~classdata)))
+    `(defclass GuiContainer ~class-name ~classdata)))

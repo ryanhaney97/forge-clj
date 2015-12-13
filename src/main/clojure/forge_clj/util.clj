@@ -6,6 +6,7 @@
    [clojure.set :as cset])
   (:import
    [java.util Random]
+   [java.lang.reflect Field]
    [net.minecraft.block Block]
    [net.minecraft.item Item ItemStack]
    [net.minecraft.entity Entity]
@@ -16,6 +17,22 @@
    [net.minecraft.server MinecraftServer]
    [net.minecraft.world World]
    [cpw.mods.fml.common.registry GameRegistry]))
+
+(defn get-field
+  "Access to private or protected field.  field-name is a symbol or
+  keyword."
+  [obj ^Class klass field-name]
+  (-> klass (.getDeclaredField (name field-name))
+      (doto (.setAccessible true))
+      (.get obj)))
+
+(defn set-field
+  "Sets a private or protected field.  field-name is a symbol or
+  keyword."
+  [obj ^Class klass field-name value]
+  (-> klass (.getDeclaredField (name field-name))
+      (doto (.setAccessible true))
+      (.set obj value)))
 
 (defn gen-method
   "Given a key word, returns a java method as a symbol by capitalizing all but the first word."

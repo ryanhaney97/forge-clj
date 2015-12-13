@@ -40,3 +40,4 @@
     `(def ~generator-name (reify IWorldGenerator
                             (~'generate [~'this ~'random ~'chunk-x ~'chunk-z ~'world ~'chunk-generator ~'chunk-provider]
                                         (clj-generate ~'random ~'chunk-x ~'chunk-z ~'world ~generate-fns))))))
+
