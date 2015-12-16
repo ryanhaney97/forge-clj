@@ -1,10 +1,12 @@
 (ns forge-clj.world
   "Contains macros and functions related to world generation."
   (:require
+   [forge-clj.core :refer [defobj]]
    [forge-clj.util :refer [update-map-keys abs]])
   (:import
    [java.util Random]
    [net.minecraft.world.gen.feature WorldGenerator]
+   [net.minecraft.world.biome BiomeGenBase]
    [net.minecraft.world World]
    [cpw.mods.fml.common IWorldGenerator]))
 
@@ -41,3 +43,6 @@
                             (~'generate [~'this ~'random ~'chunk-x ~'chunk-z ~'world ~'chunk-generator ~'chunk-provider]
                                         (clj-generate ~'random ~'chunk-x ~'chunk-z ~'world ~generate-fns))))))
 
+(defmacro defbiome [biome-name biome-id & options]
+  (let [options (apply hash-map options)]
+    `(defobj BiomeGenBase [~biome-id] ~biome-name ~options)))

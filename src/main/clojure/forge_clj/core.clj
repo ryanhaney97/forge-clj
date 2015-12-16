@@ -4,7 +4,7 @@
   (:require
    [clojure.string :as string]
    [clojure.set :as cset]
-   [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix]]
+   [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys]]
    [clojure.tools.nrepl.server :refer [start-server]])
   (:import
    [java.lang.reflect Field]
@@ -118,6 +118,47 @@
   ([class-name classdata]
    `(defclass nil ~class-name ~classdata)))
 
+(defmacro genobjclass
+  [obj-name superclass constructor-args objdata]
+  (let [class-name (symbol (str obj-name "-class"))
+        name-ns (get-in objdata [:class :ns] *ns*)
+        fullname (get-fullname name-ns class-name)
+        current-methods (concat (mapv #(gen-method (str "set-" (name %1))) (keys (dissoc objdata :override :interfaces :calls :fields :class))) (mapv gen-method (keys (get objdata :calls {}))))
+        new-methods (merge (update-map-keys #(keyword (str "set-" (name %1))) (dissoc objdata :override :interfaces :calls :fields :class)) (get objdata :calls {}))
+        new-methods (update-map-keys #(gen-method (str "super-" obj-name "-" (name %1))) new-methods)
+        exposes-methods (zipmap current-methods (keys new-methods))
+        method-calls (map #(if (vector? (val %1))
+                             `((fn [~'obj]
+                                 (~(symbol (str "." (key %1))) ~(with-meta 'obj `{:tag ~fullname}) ~@(val %1))))
+                             `((fn [~'obj]
+                                 (~(symbol (str "." (key %1))) ~(with-meta 'obj `{:tag ~fullname}) ~(val %1))))) new-methods)
+        current-fields (update-map-keys gen-method (:fields objdata))
+        new-fields (update-map-keys #(gen-method (str "set-" obj-name "-" (name %1))) (:fields objdata))
+        exposes (zipmap (keys current-fields) (map #(hash-map :set %1) (keys new-fields)))
+        field-calls (map (fn [field]
+                           `((fn [~'obj]
+                               (~(symbol (str "." (gen-method (key field)))) ~(with-meta 'obj `{:tag ~fullname}) ~(val field))))) new-fields)
+        overrides (update-map-keys gen-method (:override objdata))
+        overrides (map (fn [override]
+                         `(def ~(key override) ~(val override))) overrides)
+        classdata (deep-merge
+                   {:exposes-methods exposes-methods
+                    :exposes exposes}
+                   (if (map? (:class objdata))
+                     (cset/rename-keys (:class objdata) {:expose-fields :exposes
+                                                         :expose :exposes-methods
+                                                         :expose-methods :exposes-methods
+                                                         :interfaces :implements})
+                     {}))]
+    `(do
+       (defclass ~superclass ~class-name ~classdata)
+       ~(if overrides
+          `(with-prefix ~(str class-name "-")
+             ~@overrides))
+       (doto (apply construct ~class-name ~constructor-args)
+         ~@method-calls
+         ~@field-calls))))
+
 (defmacro genobj
   "MACRO: General purpose macro used to extend objects. Takes the superclass, constructor arguments (as a vector), the name,
   and the data (as a map), to create an instance of an anonymous class that extends the provided superclass.
@@ -138,7 +179,7 @@
         interfaces (:interfaces objdata)
         method-calls (:calls objdata)
         fields (:fields objdata)
-        objdata (dissoc objdata :override :interfaces :calls :fields)
+        objdata (dissoc objdata :override :interfaces :calls :fields :class)
         setters (map gen-setter (keys objdata))
         calls (map #(if (vector? %2)
                       (apply list %1 %2)
@@ -149,25 +190,24 @@
         field-calls (map (fn [field]
                            `(fn [~'obj]
                               (set! (~(symbol (str ".-" (gen-method (key field)))) ~(with-meta 'obj `{:tag ~superclass})) ~(val field)))) fields)
-        super-vector (if interfaces (concat [superclass] interfaces) [superclass])]
-    (if overrides
-      `(->>
-        (doto (proxy ~super-vector ~constructor-args
-                ~@override-calls)
-          ~@calls
-          ~@method-calls
-          ~@field-calls))
-      `(doto (proxy ~super-vector ~constructor-args)
-         ~@calls
-         ~@method-calls
-         ~@field-calls))))
+        super-vector (if interfaces (concat [superclass] interfaces) [superclass])
+        obj-creator (if overrides
+                      `(proxy ~super-vector ~constructor-args
+                         ~@override-calls)
+                      `(proxy ~super-vector ~constructor-args))]
+    `(doto ~obj-creator
+       ~@calls
+       ~@method-calls
+       ~@field-calls)))
 
 (defmacro defobj
   "MACRO: same as genobj, but takes a name (as the third argument), and stores the resulting instance in a def with that name.
   Other macros using this will have DEFOBJ: in their docs, instead of MACRO:.
   Realize that other things using defobj in forge-clj are macros as well unless specified otherwise."
   [superclass constructor-args obj-name objdata]
-  `(def ~obj-name (genobj ~superclass ~constructor-args ~objdata)))
+  (if (:class objdata)
+    `(def ~obj-name (genobjclass ~obj-name ~superclass ~constructor-args ~objdata))
+    `(def ~obj-name (genobj ~superclass ~constructor-args ~objdata))))
 
 (defmacro defassocclass
   "DEFCLASS: Creates a class with the specified superclass (optional), class name, and classdata.
