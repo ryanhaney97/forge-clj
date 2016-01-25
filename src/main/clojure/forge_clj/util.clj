@@ -6,6 +6,7 @@
    [clojure.set :as cset])
   (:import
    [java.util Random]
+   [java.lang.reflect Field]
    [net.minecraft.block Block]
    [net.minecraft.item Item ItemStack]
    [net.minecraft.entity Entity]
@@ -16,6 +17,22 @@
    [net.minecraft.server MinecraftServer]
    [net.minecraft.world World]
    [cpw.mods.fml.common.registry GameRegistry]))
+
+(defn get-field
+  "Access to private or protected field.  field-name is a symbol or
+  keyword."
+  [obj ^Class klass field-name]
+  (-> klass (.getDeclaredField (name field-name))
+      (doto (.setAccessible true))
+      (.get obj)))
+
+(defn set-field
+  "Sets a private or protected field.  field-name is a symbol or
+  keyword."
+  [obj ^Class klass field-name value]
+  (-> klass (.getDeclaredField (name field-name))
+      (doto (.setAccessible true))
+      (.set obj value)))
 
 (defn gen-method
   "Given a key word, returns a java method as a symbol by capitalizing all but the first word."
@@ -121,7 +138,7 @@
 (defn update-map-keys
   "Utility function. Given a map and a function, applies that function to all keys in the map."
   [func m]
-  (cset/map-invert (update-map-vals func (cset/map-invert m))))
+  (into {} (map #(vector (func (key %1)) (val %1)) m)))
 
 (defn abs
   "Extremely basic function that returns the absolute value of a number. For convenience."
@@ -202,6 +219,13 @@
         ^Vec3 look-vec (.getLookVec player)
         ^MovingObjectPosition mop (.rayTraceBlocks world pos-vec look-vec)]
     [(.-blockX mop) (.-blockY mop) (.-blockZ mop) (.-sideHit mop)]))
+
+(defn deep-merge
+  "Recursively merges maps. If keys are not maps, the last value wins. (Found on google)."
+  [& maps]
+  (if (every? map? maps)
+    (apply merge-with deep-merge maps)
+    (last maps)))
 
 (defn construct
   "Given a class and any arguments to the constructor, makes an instance of that class.

@@ -61,11 +61,13 @@
                                                   `[])}) [~event] ~'void]))
 
 (defmacro gen-events
-  "MACRO: Creates an event handler given the namespace, handler name, and a series of arguments representing the events
+  "MACRO: Creates an event handler given the handler name and a series of arguments representing the events
   to be handled."
-  [name-ns handler-name & args]
-  (let [fullname (get-fullname name-ns handler-name)
-        events (apply hash-map args)
+  [handler-name & args]
+  (let [events (apply hash-map args)
+        name-ns (get events :ns *ns*)
+        events (dissoc events :ns)
+        fullname (get-fullname name-ns handler-name)
         signitures (mapv gen-event-signiture events)
         prefix (str handler-name "-")]
     `(do

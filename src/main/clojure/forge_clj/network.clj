@@ -20,11 +20,11 @@
 
 ;------------------------------------------------------------------------------------------
 
-(defclass forge_clj.network nbt-packet {:implements [cpw.mods.fml.common.network.simpleimpl.IMessage]
-                                        :constructors {[clojure.lang.PersistentArrayMap] []
-                                                       [] []}
-                                        :state data
-                                        :init init})
+(defclass nbt-packet {:implements [cpw.mods.fml.common.network.simpleimpl.IMessage]
+                      :constructors {[clojure.lang.PersistentArrayMap] []
+                                     [] []}
+                      :state data
+                      :init init})
 
 (with-prefix nbt-packet-
   (defn init
@@ -46,17 +46,17 @@
 ;------------------------------------------------------------------------------------------
 
 (defmacro gen-packet-handler
-  "DEFCLASS: Creates a packet handler given the namespace, handler name,
+  "DEFCLASS: Creates a packet handler given the handler name
   and the function to call upon receiving a message.
 
   Uses forge_clj.network.NbtPacket as the packet underneath.
 
   The function called upon receiving a message is called with 2 arguments.
   The first being the hashmap received, and the second being the MessageContext."
-  [name-ns handler-name on-message]
+  [handler-name on-message]
   (let [prefix (str handler-name "-")]
     `(do
-       (defclass ~name-ns ~handler-name {:implements [cpw.mods.fml.common.network.simpleimpl.IMessageHandler]})
+       (defclass ~handler-name {:implements [cpw.mods.fml.common.network.simpleimpl.IMessageHandler]})
        (with-prefix ~prefix
          (defn ~'onMessage [~'this ~'message ~'context]
            (~on-message (deref (.-data ~(with-meta 'message `{:tag NbtPacket}))) ~'context))))))

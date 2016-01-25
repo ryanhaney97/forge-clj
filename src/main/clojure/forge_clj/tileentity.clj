@@ -18,8 +18,9 @@
   :sync-data - vector of keywords that involve the data to be synced when getDescriptionPacket and onDataPacket are called. Use this for render data.
   :on-load - called after loading nbt data, with an instance of this passed to it.
   :on-save - called before saving nbt data, with an instance of this passed to it."
-  [name-ns class-name & args]
+  [class-name & args]
   (let [classdata (apply hash-map args)
+        name-ns (get classdata :ns *ns*)
         prefix (str class-name "-")
         classdata (assoc-in classdata [:expose 'readFromNBT] 'superReadFromNBT)
         classdata (assoc-in classdata [:expose 'writeToNBT] 'superWriteToNBT)
@@ -30,7 +31,7 @@
         on-save (get classdata :on-save `(constantly nil))
         classdata (dissoc classdata :on-load :on-save :sync-data)]
     `(do
-       (defassocclass TileEntity ~name-ns ~class-name ~classdata)
+       (defassocclass TileEntity ~class-name ~classdata)
        (with-prefix ~prefix
          (defn ~'readFromNBT [~'this ~'compound]
            (~'.superReadFromNBT ~this-sym ~'compound)

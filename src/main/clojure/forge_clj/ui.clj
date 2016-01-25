@@ -59,7 +59,7 @@
     (add-slots container player-inventory slots)))
 
 (defmacro defcontainer
-  "DEFCLASS: Given a namespace, a name, and some classdata, creates a Container class.
+  "DEFCLASS: Given a name and some classdata, creates a Container class.
   The constructor for this class takes an instance of the player's inventory, and an instance of the bound inventory, respectively.
   If both player-hotbar? and player-inventory? are not true, you can pass in nil safely as the player inventory instead.
   The following keywords are treated specially:
@@ -67,17 +67,22 @@
   :player-hotbar? - if true, adds the player's hotbar slots to the container.
   :player-inventory? - if true, adds the player's inventory slots to the container.
   :slots - if provided, adds the specified slots to the container. Should be a vector of vectors that contain data along the lines of [slot-number slot-x slot-y]"
-  [name-ns class-name & args]
+  [class-name & args]
   (let [classdata (apply hash-map args)
+        name-ns (get classdata :ns *ns*)
         hotbar? (:player-hotbar? classdata)
         inventory? (:player-inventory? classdata)
         slots (:slots classdata)
-        classdata (assoc classdata :init 'initialize :post-init 'post-initialize :constructors {[IInventory IInventory] []} :state 'data)
+        classdata (assoc classdata
+                    :init 'initialize
+                    :post-init 'post-initialize
+                    :constructors {[IInventory IInventory] []}
+                    :state 'data)
         prefix (str class-name "-")
         fullname (get-fullname name-ns class-name)
         this-sym (with-meta 'this {:tag fullname})]
     `(do
-       (defclass Container ~name-ns ~class-name ~classdata)
+       (defclass Container ~class-name ~classdata)
        (with-prefix ~prefix
          (defn ~'initialize
            ([]
