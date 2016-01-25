@@ -73,7 +73,11 @@
         hotbar? (:player-hotbar? classdata)
         inventory? (:player-inventory? classdata)
         slots (:slots classdata)
-        classdata (assoc classdata :init 'initialize :post-init 'post-initialize :constructors {[IInventory IInventory] []} :state 'data)
+        classdata (assoc classdata
+                    :init 'initialize
+                    :post-init 'post-initialize
+                    :constructors {[IInventory IInventory] []}
+                    :state 'data)
         prefix (str class-name "-")
         fullname (get-fullname name-ns class-name)
         this-sym (with-meta 'this {:tag fullname})]

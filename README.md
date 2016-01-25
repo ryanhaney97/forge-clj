@@ -20,6 +20,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 
 ##Downloads
 
+- Version 0.5.2: [forge-clj](http://bit.ly/1PeHOgA "forge-clj Version 0.5.2") [forge-clj devkit](http://bit.ly/1Qn55fh "forge-clj devkit Version 0.5.2")
+
 - Version 0.5.1: [forge-clj](http://bit.ly/1PAHtpQ "forge-clj Version 0.5.1") [forge-clj devkit](http://bit.ly/1OJpv19 "forge-clj devkit Version 0.5.1")
 
 - Version 0.5.0: [forge-clj](http://bit.ly/1GREeYa "forge-clj Version 0.5.0") [forge-clj devkit](http://bit.ly/1GREcQ4 "forge-clj devkit Version 0.5.0")
@@ -37,6 +39,8 @@ Oh yeah, when getting ready to deploy your mod, be sure to use gradle build (not
 - Version 0.2.0: [forge-clj](http://bit.ly/1FTJ5HO "forge-clj Version 0.2.0") [forge-clj devkit](http://bit.ly/1jOENra "forge-clj devkit Version 0.2.0")
 
 ##Changelog
+
+- Version 0.5.2: Added the ability to make biomes, and extended upon defobj so that you can now optionally make it generate a class underneath for the purpose of accessing protected fields. Also added some support for custom chunk providers, though unfortunately I was unable to replicate Minecraft's terrain generation function, due to some slowness in the language as well as general complexity issues. If you wish to make a chunk provider for a forge-clj mod, I would recommend just copying the chunk provider from Java, and then reference it via inter-op. My apologies for not being able to figure this out, and even greater apologies for spending a month TRYING to figure it out and failing.
 
 - Version 0.5.1: Added docstrings to the code. Also added 2 new useful macros: defclass and with-prefix. Also rearranged the namespaces a bit. The deftab macro is now in forge-clj.items, and many of the more utility-based functions in the core (gen-classname, get-fullname, etc.) are now in forge-clj.util. I also added a new namespace called forge-clj.registry, that contains all of the register functions and such (except for the network stuff). Also made forge-clj.client.registry, which is the same, but is for the client side.
 
