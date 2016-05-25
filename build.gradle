@@ -5,7 +5,8 @@ buildscript {
             name = "forge"
             url = "http://files.minecraftforge.net/maven"
         }
-        maven { url "http://clojars.org/repo" } 
+        maven { url "http://clojars.org/repo" }
+	maven { url  "http://dl.bintray.com/kotarak/clojuresque" }
         maven {
             name = "sonatype"
             url = "https://oss.sonatype.org/content/repositories/snapshots/"
@@ -13,27 +14,28 @@ buildscript {
 
     }
     dependencies {
-	classpath 'clojuresque:clojuresque:1.7.0'
-	classpath 'net.minecraftforge.gradle:ForgeGradle:1.2-SNAPSHOT'
+	classpath 'de.kotka.clojuresque:clojuresque:2.0.0'
+	classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
     }
 }
 
 repositories {maven { url "http://clojars.org/repo" }}
 
-apply plugin: 'clojure'
+apply plugin: 'de.kotka.clojuresque.clojure'
 
 clojure.warnOnReflection = true
 clojure.aotCompile = true
 
-apply plugin: 'forge'
+apply plugin: 'net.minecraftforge.gradle.forge'
 
 version = ""
-group= "forge_clj.core" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
+group= "forge_clj" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "forge_clj"
 
 minecraft {
-    version = "1.7.10-10.13.4.1448-1.7.10"
+    version = "1.8.9-11.15.1.1722"
     runDir = "eclipse"
+    mappings = "stable_22"
 }
 
 configurations {
@@ -46,7 +48,7 @@ dependencies {
     // or you may define them like so..
     //compile "some.group:artifact:version:classifier"
     //compile "some.group:artifact:version"
-      
+
     // real examples
     //compile 'com.mod-buildcraft:buildcraft:6.0.8:dev'  // adds buildcraft to the dev env
     //compile 'com.googlecode.efficient-java-matrix-library:ejml:0.24' // adds ejml to the dev env
@@ -55,8 +57,7 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
-	shade 'org.clojure:clojure:1.7.0'
-	shade 'org.clojure:tools.nrepl:0.2.11'
+	shade 'org.clojure:clojure:1.8.0'
 }
 
 jar {
@@ -83,11 +84,11 @@ processResources
     // replace stuff in mcmod.info, nothing else
     from(sourceSets.main.resources.srcDirs) {
         include 'mcmod.info'
-                
+
         // replace version and mcversion
         expand 'version':project.version, 'mcversion':project.minecraft.version
     }
-        
+
     // copy everything else, thats not the mcmod.info
     from(sourceSets.main.resources.srcDirs) {
         exclude 'mcmod.info'

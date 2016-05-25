@@ -4,12 +4,10 @@
   (:require
    [clojure.string :as string]
    [clojure.set :as cset]
-   [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys]]
-   [clojure.tools.nrepl.server :refer [start-server]])
+   [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys]])
   (:import
-   [java.lang.reflect Field]
-   [cpw.mods.fml.common Mod Mod$EventHandler FMLCommonHandler]
-   [cpw.mods.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
+   [net.minecraftforge.fml.common Mod Mod$EventHandler FMLCommonHandler]
+   [net.minecraftforge.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
 (declare client?)
 
@@ -26,10 +24,6 @@
         name-ns (get options :ns *ns*)
         commonproxy (get options :common {})
         clientproxy (get options :client {})
-        repl (get options :repl)
-        repl (if (true? repl)
-               7888
-               repl)
         client-ns (when clientproxy
                     (get clientproxy :pre-init (get clientproxy :init (get clientproxy :post-init nil))))
         client-ns (if client-ns (first (string/split (str client-ns) #"/")) nil)
@@ -42,13 +36,11 @@
        (gen-class
         :name ~(with-meta fullname `{Mod {:name ~(str (gen-classname mod-name)) :modid ~(str mod-name) :version ~(str version)}})
         :prefix ~(symbol prefix)
-        :methods [[~(with-meta 'preInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPreInitializationEvent] ~'void]
-                  [~(with-meta 'init `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLInitializationEvent] ~'void]
-                  [~(with-meta 'postInit `{Mod$EventHandler []}) [cpw.mods.fml.common.event.FMLPostInitializationEvent] ~'void]])
+        :methods [[~(with-meta 'preInit `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLPreInitializationEvent] ~'void]
+                  [~(with-meta 'init `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLInitializationEvent] ~'void]
+                  [~(with-meta 'postInit `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLPostInitializationEvent] ~'void]])
        (with-prefix ~prefix
          (defn ~'preInit [~'this ~'event]
-           ~(when repl
-              `(defonce ~'repl-server (start-server :port ~repl)))
            ~(when common-ns
               `(require (symbol ~common-ns)))
            ~(when (:pre-init commonproxy)
@@ -250,14 +242,14 @@
 ;----------------------------
 
 (gen-class
- :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.5.2"}} forge_clj.core.ForgeClj
+ :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.6.0"}} forge_clj.core.ForgeClj
  :prefix "forge-clj-"
- :methods [[^{Mod$EventHandler []} preInit [cpw.mods.fml.common.event.FMLPreInitializationEvent] void]
-           [^{Mod$EventHandler []} init [cpw.mods.fml.common.event.FMLInitializationEvent] void]
-           [^{Mod$EventHandler []} postInit [cpw.mods.fml.common.event.FMLPostInitializationEvent] void]])
+ :methods [[^{Mod$EventHandler []} preInit [net.minecraftforge.fml.common.event.FMLPreInitializationEvent] void]
+           [^{Mod$EventHandler []} init [net.minecraftforge.fml.common.event.FMLInitializationEvent] void]
+           [^{Mod$EventHandler []} postInit [net.minecraftforge.fml.common.event.FMLPostInitializationEvent] void]])
 
 (with-prefix forge-clj-
-  (defn preInit [this event]
+  (defn preInit [_ _]
     (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
-  (defn init [this event])
-  (defn postInit [this event]))
+  (defn init [_ _])
+  (defn postInit [_ _]))

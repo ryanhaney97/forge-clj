@@ -2,28 +2,27 @@
   "Large variety of utility functions and macros that are just plain useful.
   Available to both Client and Server."
   (:require
-   [clojure.string :as string]
-   [clojure.set :as cset])
+    [clojure.string :as string])
   (:import
-   [java.util Random]
-   [java.lang.reflect Field]
-   [net.minecraft.block Block]
-   [net.minecraft.item Item ItemStack]
-   [net.minecraft.entity Entity]
-   [net.minecraft.entity.player EntityPlayer]
-   [net.minecraft.entity.item EntityItem]
-   [net.minecraft.util ChatComponentText Vec3 MovingObjectPosition]
-   [net.minecraft.inventory IInventory]
-   [net.minecraft.server MinecraftServer]
-   [net.minecraft.world World]
-   [cpw.mods.fml.common.registry GameRegistry]))
+    [java.lang.reflect Field]
+    [net.minecraft.block Block]
+    [net.minecraft.item Item ItemStack]
+    [net.minecraft.entity Entity]
+    [net.minecraft.entity.player EntityPlayer]
+    [net.minecraft.entity.item EntityItem]
+    [net.minecraft.util ChatComponentText Vec3 MovingObjectPosition BlockPos]
+    [net.minecraft.inventory IInventory]
+    [net.minecraft.server MinecraftServer]
+    [net.minecraft.world World]
+    [net.minecraftforge.fml.common.registry GameRegistry]))
 
 (defn get-field
   "Access to private or protected field.  field-name is a symbol or
   keyword."
   [obj ^Class klass field-name]
-  (-> klass (.getDeclaredField (name field-name))
-      (doto (.setAccessible true))
+  (-> klass
+      (.getDeclaredField (name field-name))
+      ^Field (doto (.setAccessible true))
       (.get obj)))
 
 (defn set-field
@@ -31,7 +30,7 @@
   keyword."
   [obj ^Class klass field-name value]
   (-> klass (.getDeclaredField (name field-name))
-      (doto (.setAccessible true))
+      ^Field (doto (.setAccessible true))
       (.set obj value)))
 
 (defn gen-method
@@ -78,7 +77,7 @@
   For each def/defn/def-/defn- statement within the macro, adds the prefix onto the name in each statement."
   [prefix & defs]
   (let [per-def (fn [possible-def]
-                  (if (or (= (first possible-def) 'def) (= (first possible-def) 'defn) (= (first possible-def) 'def-) (= (first possible-def) 'defn-) (= (first possible-def) `def) (= (first possible-def) `defn) (= (first possible-def) `def-) (= (first possible-def) `defn-))
+                  (if (or (= (first possible-def) 'def) (= (first possible-def) 'defn) (= (first possible-def) 'def-) (= (first possible-def) 'defn-) (= (first possible-def) `def) (= (first possible-def) `defn) (= (first possible-def) `defn-))
                     (let [first-val (first possible-def)
                           def-name (second possible-def)
                           def-name (symbol (str prefix def-name))
@@ -91,7 +90,7 @@
 (defn get-tile-entity-at
   "Gets the tile entity in the world at the specified coordinates. For convenience."
   [^World world x y z]
-  (.getTileEntity world (int x) (int y) (int z)))
+  (.getTileEntity world (BlockPos. (int x) (int y) (int z))))
 
 (defn get-extended-properties
   "Gets the extended entity properties from the specified entity with the provided string id."
@@ -109,8 +108,8 @@
   (.-worldServers ^MinecraftServer (MinecraftServer/getServer)))
 
 (defmulti make-itemstack
-  "Multimethod used by itemstack to make itemstacks."
-  (fn [item amount metadata] (type item)))
+          "Multimethod used by itemstack to make itemstacks."
+          (fn [item amount metadata] (type item)))
 (defmethod make-itemstack Item [^Item item amount metadata]
   (ItemStack. item (int amount) (int metadata)))
 (defmethod make-itemstack Block [^Block block amount metadata]
@@ -164,8 +163,8 @@
   [memo-name arg-vector & args]
   `(def ~memo-name
      (memoize
-      (fn ~arg-vector
-        ~@args))))
+       (fn ~arg-vector
+         ~@args))))
 
 (defn get-item
   "Given the mod-id and the item name separated by a :,
@@ -194,7 +193,7 @@
 
 (defn drop-items [^World world x y z]
   "Given the world, x, y, and z coordinates of a tile entity implementing IInventory, drops the items contained in the inventory."
-  (let [tile-entity (.getTileEntity world (int x) (int y) (int z))]
+  (let [tile-entity (.getTileEntity world (BlockPos. (int x) (int y) (int z)))]
     (if (instance? IInventory tile-entity)
       (let [tile-entity ^IInventory tile-entity
             per-stack (fn [^ItemStack istack]
@@ -215,10 +214,11 @@
 (defn get-look-coords
   "Given the current player and the world, gets the coordinates and the block side hit that the player is looking at."
   [^EntityPlayer player ^World world]
-  (let [^Vec3 pos-vec (Vec3/createVectorHelper (.-posX player) (+ (.-posY player) (.getEyeHeight player)) (.-posZ player))
+  (let [^Vec3 pos-vec (Vec3. (.-posX player) (+ (.-posY player) (.getEyeHeight player)) (.-posZ player))
         ^Vec3 look-vec (.getLookVec player)
-        ^MovingObjectPosition mop (.rayTraceBlocks world pos-vec look-vec)]
-    [(.-blockX mop) (.-blockY mop) (.-blockZ mop) (.-sideHit mop)]))
+        ^MovingObjectPosition mop (.rayTraceBlocks world pos-vec look-vec)
+        ^BlockPos mop-block-position (.getBlockPos mop)]
+    [(.getX mop-block-position) (.getY mop-block-position) (.getZ mop-block-position) (.-sideHit mop)]))
 
 (defn deep-merge
   "Recursively merges maps. If keys are not maps, the last value wins. (Found on google)."
