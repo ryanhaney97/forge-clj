@@ -4,7 +4,7 @@
            [net.minecraftforge.fml.client.registry ClientRegistry]
            [net.minecraft.block Block]
            [net.minecraft.item Item]
-           [net.minecraft.client.resources.model ModelResourceLocation]
+           [net.minecraft.client.resources.model ModelResourceLocation ModelBakery]
            [net.minecraft.client Minecraft]))
 
 (defn bind-tile-renderer
@@ -21,3 +21,7 @@
                      item)
         location (ModelResourceLocation. (str location) (str variant))]
     (.register (.getItemModelMesher (.getRenderItem (Minecraft/getMinecraft))) item (int meta) location))))
+
+(defn add-variants
+  ([item variants]
+    (ModelBakery/addVariantName ^Item item (into-array String variants))))

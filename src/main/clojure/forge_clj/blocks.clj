@@ -1,28 +1,38 @@
 (ns forge-clj.blocks
   "Contains macros related to creating blocks."
   (:require
-    [forge-clj.core :refer [defobj genobj]])
+    [forge-clj.core :refer [defobj defclass]]
+    [forge-clj.util :refer [with-prefix]])
   (:import
     [net.minecraft.block Block BlockContainer]
-    [net.minecraft.block.properties PropertyHelper IProperty]
+    [net.minecraft.block.properties IProperty PropertyHelper]
     [net.minecraft.block.material Material]
     [net.minecraft.block.state BlockState IBlockState]
-    [net.minecraft.item ItemBlock]
-    [com.google.common.collect ImmutableSet]))
+    [net.minecraft.item ItemBlock ItemStack]
+    [com.google.common.collect ImmutableSet ImmutableMap]))
+
+(defclass net.minecraft.block.properties.PropertyHelper key-property
+          {:init "init"
+           :state "keywords"
+           :expose {getName superGetName}
+           :constructors {[String clojure.lang.PersistentVector] [String Class]}})
+
+(with-prefix
+  key-property-
+  (defn init
+    [property-name keywords]
+    [[property-name clojure.lang.Keyword] keywords])
+  (defn getName
+    ([^KeyProperty this]
+     (.superGetName this))
+    ([_ property]
+     (name property)))
+  (defn getAllowedValues
+    [^KeyProperty this]
+    (.-keywords this)))
 
 (defn keywords->property [name keywords]
-  (genobj PropertyHelper
-          [name clojure.lang.Keyword]
-          {:override {:get-name (fn
-                                  ([]
-                                   (let [^PropertyHelper this this]
-                                     (proxy-super getName)))
-                                  ([p]
-                                   (if (instance? clojure.lang.Named p)
-                                     (name p)
-                                     (str p))))
-                      :get-allowed-values (fn []
-                                            (ImmutableSet/of (into-array clojure.lang.Keyword keywords)))}}))
+  (KeyProperty. name keywords))
 
 (defn map->properties [property-map]
   (into {} (map #(vector (key %1) (keywords->property (name (key %1)) (val %1))) property-map)))
@@ -48,26 +58,42 @@
      (recur property-map (inc meta-value) (assoc result meta-value (zipmap (keys property-map)
                                                                            (mapv (partial get-val-for-meta-at-property-number property-map meta-value) (range (count (keys property-map))))))))))
 
-(defn state->map [map-keys ^IBlockState state]
-  (into {} (map #(vector %1 (.getValue state (name %1))) map-keys)))
+(defn state->map [properties ^IBlockState state]
+  (into {} (map #(vector (keyword (.getName ^IProperty %1)) (keyword (.getValue state %1))) properties)))
 
 (defn add-state-to-blockdata [blockdata state]
-  (let [properties (map->properties state)
-        meta-map (make-meta-map state)
+  (let [meta-map (make-meta-map state)
+        blockdata (assoc blockdata :class true)
         blockdata (if (get-in blockdata [:override :create-block-state])
                     blockdata
                     (assoc-in blockdata [:override :create-block-state] `(fn []
-                                                                           (BlockState. ~'this (into-array IProperty ~(vals properties))))))
-        meta->property (map #(list '.withProperty `(.getDefaultState ~'this) (name (key %1)) (get meta-map 'meta)) properties)
+                                                                           (BlockState. ~'this (into-array IProperty (vals (map->properties ~state)))))))
+        meta->property (map #(list '.withProperty `(keywords->property ~(name (key %1)) ~(val %1)) `(get (get ~meta-map ~'meta) ~(key %1))) state)
         blockdata (if (get-in blockdata [:override :get-state-from-meta])
                     blockdata
                     (assoc-in blockdata [:override :get-state-from-meta] `(fn [~'meta]
-                                                                            ~(cons `do meta->property))))
+                                                                            ~(concat `(-> (.getDefaultState ~(with-meta 'this {:tag `Block}))) meta->property))))
         blockdata (if (get-in blockdata [:override :get-meta-from-state])
                     blockdata
-                    (assoc-in blockdata [:override :get-meta-from-state] `(fn [~(with-meta 'state {:tag `IBlockState})]
-                                                                            (get ~(clojure.set/map-invert meta-map) (state->map ~(keys properties) ~'state)))))]
+                    (assoc-in blockdata [:override :get-meta-from-state] `(fn [~(with-meta 'block-state {:tag `IBlockState})]
+                                                                            (get ~(clojure.set/map-invert meta-map) (state->map (vals (map->properties ~state)) ~'block-state)))))
+        default-property-setters (map #(list '.withProperty `(keywords->property ~(name (key %1)) ~(val %1)) (first (val %1))) state)
+        blockdata (if (get blockdata :default-state)
+                    blockdata
+                    (assoc blockdata :default-state (concat `(doto (.getBaseState (.getBlockState ~(with-meta 'this {:tag `Block})))) default-property-setters)))]
     blockdata))
+
+(defn guava-map->clojure-map [^ImmutableMap gmap]
+  (let [g-keys (into [] (.toArray (.keySet gmap)))
+        g-vals (map #(.get gmap %1) g-keys)]
+    (zipmap g-keys g-vals)))
+
+(defn get-state
+  ([^Block block ^ItemStack item]
+   (let [^IBlockState state (.getStateFromMeta block (.getMetadata item))
+         ^ImmutableMap state-map (.getProperties state)
+         state-map (guava-map->clojure-map state-map)]
+     (into {} (mapv #(vector (keyword (.getName ^IProperty (key %1))) (keyword (val %1))) state-map)))))
 
 (defmacro defblock
   "DEFOBJ: Generates an anonymous instance of a Block with the specified properties.
@@ -91,5 +117,4 @@
   "DEFOBJ: Creates an anonymous instance of an ItemBlock with the specified properties."
   [item-name block & args]
   (let [itemdata (apply hash-map args)]
-    `(defobj `ItemBlock [~block] ~item-name ~itemdata)))
-
+    `(defobj ItemBlock [~block] ~item-name ~itemdata)))

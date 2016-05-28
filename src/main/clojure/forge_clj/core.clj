@@ -2,12 +2,12 @@
   "Includes all of the core functionality for forge-clj, such as defmod,
   and general-purpose macros used by other namespaces in forge-clj."
   (:require
-   [clojure.string :as string]
-   [clojure.set :as cset]
-   [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys]])
+    [clojure.string :as string]
+    [clojure.set :as cset]
+    [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys]])
   (:import
-   [net.minecraftforge.fml.common Mod Mod$EventHandler FMLCommonHandler]
-   [net.minecraftforge.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
+    [net.minecraftforge.fml.common Mod Mod$EventHandler FMLCommonHandler]
+    [net.minecraftforge.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
 (declare client?)
 
@@ -34,37 +34,37 @@
         fullname (get-fullname name-ns mod-name)]
     `(do
        (gen-class
-        :name ~(with-meta fullname `{Mod {:name ~(str (gen-classname mod-name)) :modid ~(str mod-name) :version ~(str version)}})
-        :prefix ~(symbol prefix)
-        :methods [[~(with-meta 'preInit `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLPreInitializationEvent] ~'void]
-                  [~(with-meta 'init `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLInitializationEvent] ~'void]
-                  [~(with-meta 'postInit `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLPostInitializationEvent] ~'void]])
+         :name ~(with-meta fullname `{Mod {:name ~(str (gen-classname mod-name)) :modid ~(str mod-name) :version ~(str version)}})
+         :prefix ~(symbol prefix)
+         :methods [[~(with-meta 'preInit `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLPreInitializationEvent] ~'void]
+                   [~(with-meta 'init `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLInitializationEvent] ~'void]
+                   [~(with-meta 'postInit `{Mod$EventHandler []}) [net.minecraftforge.fml.common.event.FMLPostInitializationEvent] ~'void]])
        (with-prefix ~prefix
-         (defn ~'preInit [~'this ~'event]
-           ~(when common-ns
-              `(require (symbol ~common-ns)))
-           ~(when (:pre-init commonproxy)
-              `(~(:pre-init commonproxy) ~'this ~'event))
-           (if client?
-             (do
-               ~(when client-ns
-                  `(require (symbol ~client-ns)))
-               ~(when (:pre-init clientproxy)
-                  `(~(:pre-init clientproxy) ~'this ~'event)))))
+                    (defn ~'preInit [~'this ~'event]
+                      ~(when common-ns
+                         `(require (symbol ~common-ns)))
+                      ~(when (:pre-init commonproxy)
+                         `(~(:pre-init commonproxy) ~'this ~'event))
+                      (if client?
+                        (do
+                          ~(when client-ns
+                             `(require (symbol ~client-ns)))
+                          ~(when (:pre-init clientproxy)
+                             `(~(:pre-init clientproxy) ~'this ~'event)))))
 
-         (defn ~'init [~'this ~'event]
-           ~(when (:init commonproxy)
-              `(~(:init commonproxy) ~'this ~'event))
-           (if client?
-             ~(when (:init clientproxy)
-                `(~(:init clientproxy) ~'this ~'event))))
+                    (defn ~'init [~'this ~'event]
+                      ~(when (:init commonproxy)
+                         `(~(:init commonproxy) ~'this ~'event))
+                      (if client?
+                        ~(when (:init clientproxy)
+                           `(~(:init clientproxy) ~'this ~'event))))
 
-         (defn ~'postInit [~'this ~'event]
-           ~(when (:post-init commonproxy)
-              `(~(:post-init commonproxy) ~'this ~'event))
-           (if client?
-             ~(when (:post-init clientproxy)
-                `(~(:post-init clientproxy) ~'this ~'event))))))))
+                    (defn ~'postInit [~'this ~'event]
+                      ~(when (:post-init commonproxy)
+                         `(~(:post-init commonproxy) ~'this ~'event))
+                      (if client?
+                        ~(when (:post-init clientproxy)
+                           `(~(:post-init clientproxy) ~'this ~'event))))))))
 
 (defmacro defclass
   "MACRO: Given a superclass (optional), a class name,
@@ -101,10 +101,10 @@
          fullname (get-fullname name-ns class-name)]
      `(do
         (gen-class
-         :name ~fullname
-         :prefix ~prefix
-         :extends ~superclass
-         ~@classdata)
+          :name ~fullname
+          :prefix ~prefix
+          :extends ~superclass
+          ~@classdata)
         (def ~class-name ~fullname)
         (import ~fullname))))
   ([class-name classdata]
@@ -120,10 +120,10 @@
         new-methods (update-map-keys #(gen-method (str "super-" obj-name "-" (name %1))) new-methods)
         exposes-methods (zipmap current-methods (keys new-methods))
         method-calls (map #(if (vector? (val %1))
-                             `((fn [~'obj]
-                                 (~(symbol (str "." (key %1))) ~(with-meta 'obj `{:tag ~fullname}) ~@(val %1))))
-                             `((fn [~'obj]
-                                 (~(symbol (str "." (key %1))) ~(with-meta 'obj `{:tag ~fullname}) ~(val %1))))) new-methods)
+                            `((fn [~'obj]
+                                (~(symbol (str "." (key %1))) ~(with-meta 'obj `{:tag ~fullname}) ~@(val %1))))
+                            `((fn [~'obj]
+                                (~(symbol (str "." (key %1))) ~(with-meta 'obj `{:tag ~fullname}) ~(val %1))))) new-methods)
         current-fields (update-map-keys gen-method (:fields objdata))
         new-fields (update-map-keys #(gen-method (str "set-" obj-name "-" (name %1))) (:fields objdata))
         exposes (zipmap (keys current-fields) (map #(hash-map :set %1) (keys new-fields)))
@@ -132,24 +132,26 @@
                                (~(symbol (str "." (gen-method (key field)))) ~(with-meta 'obj `{:tag ~fullname}) ~(val field))))) new-fields)
         overrides (update-map-keys gen-method (:override objdata))
         overrides (map (fn [override]
-                         `(def ~(key override) ~(val override))) overrides)
+                         `(defn ~(key override) [~'this ~'& ~'args]
+                            (apply ~(val override) ~'args))) overrides)
         classdata (deep-merge
-                   {:exposes-methods exposes-methods
-                    :exposes exposes}
-                   (if (map? (:class objdata))
-                     (cset/rename-keys (:class objdata) {:expose-fields :exposes
-                                                         :expose :exposes-methods
-                                                         :expose-methods :exposes-methods
-                                                         :interfaces :implements})
-                     {}))]
+                    {:exposes-methods exposes-methods
+                     :exposes exposes}
+                    (if (map? (:class objdata))
+                      (cset/rename-keys (:class objdata) {:expose-fields :exposes
+                                                          :expose :exposes-methods
+                                                          :expose-methods :exposes-methods
+                                                          :interfaces :implements})
+                      {}))]
     `(do
        (defclass ~superclass ~class-name ~classdata)
        ~(if overrides
           `(with-prefix ~(str class-name "-")
-             ~@overrides))
-       (doto (apply construct ~class-name ~constructor-args)
-         ~@method-calls
-         ~@field-calls))))
+                        ~@overrides))
+       (let [~'this (apply construct ~class-name ~constructor-args)]
+         (doto ~'this
+           ~@method-calls
+           ~@field-calls)))))
 
 (defmacro genobj
   "MACRO: General purpose macro used to extend objects. Takes the superclass, constructor arguments (as a vector), the name,
@@ -174,11 +176,11 @@
         objdata (dissoc objdata :override :interfaces :calls :fields :class)
         setters (map gen-setter (keys objdata))
         calls (map #(if (vector? %2)
-                      (apply list %1 %2)
-                      (list %1 %2)) setters (vals objdata))
+                     (apply list %1 %2)
+                     (list %1 %2)) setters (vals objdata))
         method-calls (map #(if (vector? (val %1))
-                             (apply list (symbol (str "." (gen-method (key %1)))) (val %1))
-                             (list (symbol (str "." (gen-method (key %1)))) (val %1))) method-calls)
+                            (apply list (symbol (str "." (gen-method (key %1)))) (val %1))
+                            (list (symbol (str "." (gen-method (key %1)))) (val %1))) method-calls)
         field-calls (map (fn [field]
                            `(fn [~'obj]
                               (set! (~(symbol (str ".-" (gen-method (key field)))) ~(with-meta 'obj `{:tag ~superclass})) ~(val field)))) fields)
@@ -187,10 +189,11 @@
                       `(proxy ~super-vector ~constructor-args
                          ~@override-calls)
                       `(proxy ~super-vector ~constructor-args))]
-    `(doto ~obj-creator
-       ~@calls
-       ~@method-calls
-       ~@field-calls)))
+    `(let [~'this ~obj-creator]
+       (doto ~'this
+         ~@calls
+         ~@method-calls
+         ~@field-calls))))
 
 (defmacro defobj
   "MACRO: same as genobj, but takes a name (as the third argument), and stores the resulting instance in a def with that name.
@@ -211,8 +214,8 @@
   ([superclass class-name classdata]
    (let [name-ns (get classdata :ns *ns*)
          classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
-                     :init 'initialize
-                     :state 'data)
+                                    :init 'initialize
+                                    :state 'data)
          fields (get classdata :fields {})
          prefix (str class-name "-")
          fullname (get-fullname name-ns class-name)
@@ -220,21 +223,21 @@
      `(do
         (defclass ~superclass ~class-name ~classdata)
         (with-prefix ~prefix
-          (defn ~'initialize []
-            [[] (atom ~fields)])
-          (defn ~'assoc [~'this ~'obj-key ~'obj-val]
-            (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
-            ~'this)
-          (defn ~'conj [~'this ~'obj]
-            (swap! (~'.-data ~this-sym) conj ~'obj)
-            ~'this)
-          (defn ~'persistent [~'this]
-            (deref (~'.-data ~this-sym)))
-          (defn ~'valAt
-            ([~'this ~'obj]
-             (get (deref (~'.-data ~this-sym)) ~'obj))
-            ([~'this ~'obj ~'notfound]
-             (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound)))))))
+                     (defn ~'initialize []
+                       [[] (atom ~fields)])
+                     (defn ~'assoc [~'this ~'obj-key ~'obj-val]
+                       (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
+                       ~'this)
+                     (defn ~'conj [~'this ~'obj]
+                       (swap! (~'.-data ~this-sym) conj ~'obj)
+                       ~'this)
+                     (defn ~'persistent [~'this]
+                       (deref (~'.-data ~this-sym)))
+                     (defn ~'valAt
+                       ([~'this ~'obj]
+                         (get (deref (~'.-data ~this-sym)) ~'obj))
+                       ([~'this ~'obj ~'notfound]
+                         (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound)))))))
   ([class-name classdata]
    `(defassocclass nil ~class-name ~classdata)))
 
@@ -242,14 +245,14 @@
 ;----------------------------
 
 (gen-class
- :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.6.0"}} forge_clj.core.ForgeClj
- :prefix "forge-clj-"
- :methods [[^{Mod$EventHandler []} preInit [net.minecraftforge.fml.common.event.FMLPreInitializationEvent] void]
-           [^{Mod$EventHandler []} init [net.minecraftforge.fml.common.event.FMLInitializationEvent] void]
-           [^{Mod$EventHandler []} postInit [net.minecraftforge.fml.common.event.FMLPostInitializationEvent] void]])
+  :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.6.0"}} forge_clj.core.ForgeClj
+  :prefix "forge-clj-"
+  :methods [[^{Mod$EventHandler []} preInit [net.minecraftforge.fml.common.event.FMLPreInitializationEvent] void]
+            [^{Mod$EventHandler []} init [net.minecraftforge.fml.common.event.FMLInitializationEvent] void]
+            [^{Mod$EventHandler []} postInit [net.minecraftforge.fml.common.event.FMLPostInitializationEvent] void]])
 
 (with-prefix forge-clj-
-  (defn preInit [_ _]
-    (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
-  (defn init [_ _])
-  (defn postInit [_ _]))
+             (defn preInit [_ _]
+               (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
+             (defn init [_ _])
+             (defn postInit [_ _]))
