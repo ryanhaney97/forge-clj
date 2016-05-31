@@ -15,3 +15,5 @@ tutorial.md
 /forge-clj.iws
 /forge-clj.ipr
 /forge-clj.iml
+/out/
+/build/

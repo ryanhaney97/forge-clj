@@ -13,6 +13,8 @@
   (ClientRegistry/bindTileEntitySpecialRenderer tile-entity-class renderer))
 
 (defn register-model
+  ([item location]
+    (register-model item 0 location))
   ([item meta location]
     (register-model item meta location "inventory"))
   ([item meta location variant]

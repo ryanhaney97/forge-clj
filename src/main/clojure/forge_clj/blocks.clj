@@ -110,7 +110,10 @@
         blockdata (dissoc blockdata :material :container? :state)
         blockdata (if state
                     (add-state-to-blockdata blockdata state)
-                    blockdata)]
+                    blockdata)
+        blockdata (if (:unlocalized-name blockdata)
+                   blockdata
+                   (assoc blockdata :unlocalized-name (str block-name)))]
     `(defobj ~(if container? `BlockContainer `Block) [~material] ~block-name ~blockdata)))
 
 (defmacro defitemblock
