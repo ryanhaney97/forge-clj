@@ -4,15 +4,12 @@
   (:require
     [clojure.string :as string]
     [clojure.set :as cset]
-    [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys set-field]])
+    [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys set-field ensure-registered]])
   (:import
     [net.minecraftforge.fml.common Mod Mod$EventHandler FMLCommonHandler]
-    [net.minecraftforge.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]
-    [net.minecraft.init Bootstrap]))
+    [net.minecraftforge.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
 (declare client?)
-
-(set-field nil Bootstrap :alreadyRegistered true)
 
 (defmacro defmod
   "MACRO: Takes the current user namespace, the name of the mod, the version, and a rest argument evaled as a map.
@@ -35,6 +32,7 @@
         common-ns (if common-ns (first (string/split (str common-ns) #"/")) nil)
         prefix (str mod-name "-")
         fullname (get-fullname name-ns mod-name)]
+    (ensure-registered)
     `(do
        (gen-class
          :name ~(with-meta fullname `{Mod {:name ~(str (gen-classname mod-name)) :modid ~(str mod-name) :version ~(str version)}})

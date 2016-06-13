@@ -1,7 +1,8 @@
 (ns forge-clj.registry
   "Contains all of the functions used to register things with Minecraft Forge."
   (:require
-    [clojure.string :as string])
+    [clojure.string :as string]
+    [forge-clj.util])
   (:import
     [net.minecraft.block Block]
     [net.minecraft.item Item]
@@ -16,42 +17,42 @@
 
 (def biome-type-list
   {:desert BiomeManager$BiomeType/DESERT
-   :warm BiomeManager$BiomeType/WARM
-   :cool BiomeManager$BiomeType/COOL
-   :icy BiomeManager$BiomeType/ICY})
+   :warm   BiomeManager$BiomeType/WARM
+   :cool   BiomeManager$BiomeType/COOL
+   :icy    BiomeManager$BiomeType/ICY})
 
 (def biome-group-list
-  {:hot BiomeDictionary$Type/HOT
-   :cold BiomeDictionary$Type/COLD
-   :sparse BiomeDictionary$Type/SPARSE
-   :dense BiomeDictionary$Type/DENSE
-   :wet BiomeDictionary$Type/WET
-   :dry BiomeDictionary$Type/DRY
-   :savanna BiomeDictionary$Type/SAVANNA
+  {:hot        BiomeDictionary$Type/HOT
+   :cold       BiomeDictionary$Type/COLD
+   :sparse     BiomeDictionary$Type/SPARSE
+   :dense      BiomeDictionary$Type/DENSE
+   :wet        BiomeDictionary$Type/WET
+   :dry        BiomeDictionary$Type/DRY
+   :savanna    BiomeDictionary$Type/SAVANNA
    :coniferous BiomeDictionary$Type/CONIFEROUS
-   :jungle BiomeDictionary$Type/JUNGLE
-   :spooky BiomeDictionary$Type/SPOOKY
-   :dead BiomeDictionary$Type/DEAD
-   :lush BiomeDictionary$Type/LUSH
-   :nether BiomeDictionary$Type/NETHER
-   :end BiomeDictionary$Type/END
-   :mushroom BiomeDictionary$Type/MUSHROOM
-   :magical BiomeDictionary$Type/MAGICAL
-   :ocean BiomeDictionary$Type/OCEAN
-   :river BiomeDictionary$Type/RIVER
-   :water BiomeDictionary$Type/WATER
-   :mesa BiomeDictionary$Type/MESA
-   :forest BiomeDictionary$Type/FOREST
-   :plains BiomeDictionary$Type/PLAINS
-   :mountain BiomeDictionary$Type/MOUNTAIN
-   :hills BiomeDictionary$Type/HILLS
-   :swamp BiomeDictionary$Type/SWAMP
-   :sandy BiomeDictionary$Type/SANDY
-   :snowy BiomeDictionary$Type/SNOWY
-   :wasteland BiomeDictionary$Type/WASTELAND
-   :beach BiomeDictionary$Type/BEACH
-   :desert BiomeDictionary$Type/DESERT
-   :frozen BiomeDictionary$Type/FROZEN})
+   :jungle     BiomeDictionary$Type/JUNGLE
+   :spooky     BiomeDictionary$Type/SPOOKY
+   :dead       BiomeDictionary$Type/DEAD
+   :lush       BiomeDictionary$Type/LUSH
+   :nether     BiomeDictionary$Type/NETHER
+   :end        BiomeDictionary$Type/END
+   :mushroom   BiomeDictionary$Type/MUSHROOM
+   :magical    BiomeDictionary$Type/MAGICAL
+   :ocean      BiomeDictionary$Type/OCEAN
+   :river      BiomeDictionary$Type/RIVER
+   :water      BiomeDictionary$Type/WATER
+   :mesa       BiomeDictionary$Type/MESA
+   :forest     BiomeDictionary$Type/FOREST
+   :plains     BiomeDictionary$Type/PLAINS
+   :mountain   BiomeDictionary$Type/MOUNTAIN
+   :hills      BiomeDictionary$Type/HILLS
+   :swamp      BiomeDictionary$Type/SWAMP
+   :sandy      BiomeDictionary$Type/SANDY
+   :snowy      BiomeDictionary$Type/SNOWY
+   :wasteland  BiomeDictionary$Type/WASTELAND
+   :beach      BiomeDictionary$Type/BEACH
+   :desert     BiomeDictionary$Type/DESERT
+   :frozen     BiomeDictionary$Type/FROZEN})
 
 (defn register-block
   ([^Block block forge-name]
@@ -71,7 +72,7 @@
    (register-generator generator 0))
   ([^IWorldGenerator generator mod-priority]
    (GameRegistry/registerWorldGenerator generator mod-priority)
-    generator))
+   generator))
 
 (defn register-biome [^BiomeGenBase biome biome-types biome-groups spawn-weight]
   (if (vector? biome-types)
@@ -107,26 +108,23 @@
     (if (and (= (count args) 2) (= superclass TileEntity))
       (apply register-tile-entity args)
       (if (= (count args) 1)
-        (register-events args)))))
+        (register-events (first args))))))
 
 (defn differentiate-entity-registers [& args]
   (if (and (= (count args) 3) (instance? IExtendedEntityProperties (last args)))
     (apply register-extended-properties args)))
 
 (defn differentiate-other-registers [& args]
-  (if (instance? Entity (first args))
-    (apply differentiate-entity-registers args)
-    (if (and (= (count args) 2) (instance? IGuiHandler (second args)))
-      (apply register-gui-handler args)
-      (if (instance? Class (first args))
-        (apply differentiate-class-registers args)))))
-
-(defn get-class-name [c]
-  (let [cname (str (type c))
-        cname (if (.contains cname "proxy")
-                (apply str (interpose "$" (rest (butlast (string/split cname #"\$")))))
-                (first (string/split cname #"class\s")))]
-    cname))
+  (if (and (= (count args) 4) (instance? BiomeGenBase (first args)))
+    (apply register-biome args)
+    (if (instance? Entity (first args))
+      (apply differentiate-entity-registers args)
+      (if (and (= (count args) 2) (instance? IGuiHandler (second args)))
+        (apply register-gui-handler args)
+        (if (instance? Class (first args))
+          (apply differentiate-class-registers args)
+          (if (= (count args) 1)
+            (register-events (first args))))))))
 
 (defmulti register
           "Multimethod consisting of a series of register functions. Handles the following arguments:
@@ -135,18 +133,16 @@
           (block-object, name, blockitem): registers block with specified name and blockitem object.
           (world-generator): registers a world generator.
           (world-generator, priority): registers a world generator with the specified priority."
-          (fn [element & args] [(count args) (get-class-name element)]))
-(defmethod register [1 "net.minecraft.block.Block"] [block forge-name]
+          (fn [element & args] [(count args) (type element)]))
+(defmethod register [1 Block] [block forge-name]
   (register-block block forge-name))
-(defmethod register [1 "net.minecraft.item.Item"] [item forge-name]
+(defmethod register [1 Item] [item forge-name]
   (register-item item forge-name))
-(defmethod register [2 "net.minecraft.block.Block"] [element forge-name blockitem]
+(defmethod register [2 Block] [element forge-name blockitem]
   (register-block element forge-name blockitem))
-(defmethod register [0 "net.minecraftforge.fml.common.IWorldGenerator"] [generator]
+(defmethod register [0 IWorldGenerator] [generator]
   (register-generator generator))
-(defmethod register [1 "net.minecraftforge.fml.common.IWorldGenerator"] [generator mod-priority]
+(defmethod register [1 IWorldGenerator] [generator mod-priority]
   (register-generator generator mod-priority))
-(defmethod register [3 "net.minecraft.world.biome.BiomeGenBase"] [biome biome-types biome-groups spawn-weight]
-  (register-biome biome biome-types biome-groups spawn-weight))
 (defmethod register :default [& args]
   (apply differentiate-other-registers args))

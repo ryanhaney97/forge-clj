@@ -4,7 +4,7 @@
   (:require
     [clojure.string :as string])
   (:import
-    [java.lang.reflect Field]
+    [java.lang.reflect Field Modifier]
     [net.minecraft.block Block]
     [net.minecraft.item Item ItemStack]
     [net.minecraft.entity Entity]
@@ -14,7 +14,8 @@
     [net.minecraft.inventory IInventory]
     [net.minecraft.server MinecraftServer]
     [net.minecraft.world World]
-    [net.minecraftforge.fml.common.registry GameRegistry]))
+    [net.minecraftforge.fml.common.registry GameRegistry]
+    [net.minecraft.init Bootstrap]))
 
 (defn get-field
   "Access to private or protected field.  field-name is a symbol or
@@ -28,10 +29,25 @@
 (defn set-field
   "Sets a private or protected field.  field-name is a symbol or
   keyword."
-  [obj ^Class klass field-name value]
+  [obj ^Class klass field-name value & final?]
   (-> klass (.getDeclaredField (name field-name))
-      ^Field (doto (.setAccessible true))
+      ^Field (#(if final?
+                (let [^Field field (doto ^Field %1 (.setAccessible true))
+                      ^Field mod-field (doto ^Field (.getDeclaredField Field "modifiers") (.setAccessible true))]
+                  (.setInt mod-field field (bit-and-not (.getModifiers field) Modifier/FINAL))
+                  field)
+                (doto ^Field %1 (.setAccessible true))))
       (.set obj value)))
+
+(defn ensure-registered []
+  (if (not (.getObject Block/blockRegistry (net.minecraft.util.ResourceLocation. "air")))
+    (Block/registerBlocks))
+  (try
+    (set-field nil Bootstrap "field_151355_a" true)
+    (catch Exception e
+      (set-field nil Bootstrap "alreadyRegistered" true))))
+
+(ensure-registered)
 
 (defn gen-method
   "Given a key word, returns a java method as a symbol by capitalizing all but the first word."
@@ -232,3 +248,55 @@
   Not a macro like Clojure's new keyword, so can be used with class names that are stored in symbols."
   [klass & args]
   (clojure.lang.Reflector/invokeConstructor klass (into-array Object args)))
+
+;(defn fill-blocks-class []
+;  (let [dummy-block (Block. net.minecraft.block.material.Material/rock)
+;        dummy-fields (apply merge (map #(hash-map (keyword (.getName ^Field %1)) dummy-block) (into [] (.getFields net.minecraft.init.Blocks))))
+;        other-fields {:log (net.minecraft.block.BlockLog)
+;                      :grass (proxy [net.minecraft.block.BlockGrass] [])
+;                      :flowing_water (proxy [net.minecraft.block.BlockDynamicLiquid] [net.minecraft.block.material.Material/water])
+;                      :water (proxy [net.minecraft.block.BlockStaticLiquid] [net.minecraft.block.material.Material/water])
+;                      :flowing_lava (proxy [net.minecraft.block.BlockDynamicLiquid] [net.minecraft.block.material.Material/lava])
+;                      :lava (proxy [net.minecraft.block.BlockStaticLiquid] [net.minecraft.block.material.Material/lava])
+;                      :sand (net.minecraft.block.BlockSand.)
+;                      :leaves (net.minecraft.block.BlockOldLeaf.)
+;                      :leaves2 (net.minecraft.block.BlockNewLeaf.)
+;                      :sticky_piston (net.minecraft.block.BlockPistonBase. true)
+;                      :tallgrass (proxy [net.minecraft.block.BlockTallGrass] [])
+;                      :deadbush (proxy [net.minecraft.block.BlockDeadBush] [])
+;                      :piston (net.minecraft.block.BlockPistonBase. false)
+;                      :piston_head (net.minecraft.block.BlockPistonExtension.)
+;                      :piston_extension (net.minecraft.block.BlockPistonMoving.)
+;                      :yellow_flower (proxy [net.minecraft.block.BlockYellowFlower] [])
+;                      :red_flower (proxy [net.minecraft.block.BlockRedFlower] [])
+;                      :brown_mushroom (proxy [net.minecraft.block.BlockBush] [])
+;                      :red_mushroom (proxy [net.minecraft.block.BlockBush] [])
+;                      :double_stone_slab (net.minecraft.block.BlockDoubleStoneSlab.)
+;                      :stone_slab (net.minecraft.block.BlockHalfStoneSlab.)
+;                      :fire (proxy [net.minecraft.block.BlockFire] [])
+;                      :chest (proxy [net.minecraft.block.BlockChest] [0])
+;                      :redstone_wire (net.minecraft.block.BlockRedstoneWire.)
+;                      :cactus (proxy [net.minecraft.block.BlockCactus] [])
+;                      :reeds (proxy [net.minecraft.block.BlockReed] [])
+;                      :portal (net.minecraft.block.BlockPortal.)
+;                      :unpowered_repeater (proxy [net.minecraft.block.BlockRedstoneRepeater] [false])
+;                      :powered_repeater (proxy [net.minecraft.block.BlockRedstoneRepeater] [true])
+;                      :mycelium (proxy [net.minecraft.block.BlockMycelium] [])
+;                      :cauldron (net.minecraft.block.BlockCauldron.)
+;                      :double_wooden_slab (net.minecraft.block.BlockDoubleWoodSlab.)
+;                      :wooden_slab (net.minecraft.block.BlockHalfWoodSlab.)
+;                      :tripwire_hook (net.minecraft.block.BlockTripWireHook.)
+;                      :beacon (net.minecraft.block.BlockBeacon.)
+;                      :skull (proxy [net.minecraft.block.BlockSkull] [])
+;                      :unpowered_comparator (net.minecraft.block.BlockRedstoneComparator. false)
+;                      :powered_comparator (net.minecraft.block.BlockRedstoneComparator. true)
+;                      :daylight_detector (net.minecraft.block.BlockDaylightDetector. false)
+;                      :daylight_detector_inverted (net.minecraft.block.BlockDaylightDetector. true)
+;                      :hopper (net.minecraft.block.BlockHopper.)
+;                      :double_plant (net.minecraft.block.BlockDoublePlant.)
+;                      :stained_glass (net.minecraft.block.BlockStainedGlass. net.minecraft.block.material.Material/glass)
+;                      :stained_glass_pane (net.minecraft.block.BlockStainedGlassPane.)
+;                      :double_stone_slab2 (net.minecraft.block.BlockDoubleStoneSlabNew.)
+;                      :stone_slab2 (net.minecraft.block.BlockHalfStoneSlabNew.)}
+;        fields (merge dummy-fields other-fields)]
+;    (dorun (map #(set-field nil net.minecraft.init.Blocks (key %1) (val %1) true) fields))))
