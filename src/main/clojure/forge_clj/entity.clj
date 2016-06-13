@@ -3,8 +3,7 @@
   (:require
    [forge-clj.nbt :refer [read-tag-data! write-tag-data!]]
    [forge-clj.core :refer [defassocclass]]
-   [forge-clj.util :refer [get-fullname with-prefix]]
-   [clojure.string :as string])
+   [forge-clj.util :refer [get-fullname with-prefix]])
   (:import
    [net.minecraftforge.common IExtendedEntityProperties]))
 

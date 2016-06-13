@@ -1,26 +1,27 @@
 (ns forge-clj.event
   "Contains macros and functions for creating an event handler."
   (:require
-   [forge-clj.util :refer [get-fullname gen-classname]]
-   [clojure.string :as string])
+    [forge-clj.util :refer [get-fullname gen-classname]])
   (:import
-   [cpw.mods.fml.common.eventhandler SubscribeEvent]))
+    [net.minecraftforge.fml.common.eventhandler SubscribeEvent]))
 
 (def event-packages
-  "Just a vector of packages to be searched for event classes."
-  ["net.minecraftforge.event."
-   "cpw.mods.fml.common.event."
-   "net.minecraftforge.event.brewing."
-   "net.minecraftforge.event.entity."
-   "net.minecraftforge.event.entity.item."
-   "net.minecraftforge.event.entity.living."
-   "net.minecraftforge.event.entity.minecraft."
-   "net.minecraftforge.event.entity.player."
-   "net.minecraftforge.event.terraingen."
-   "net.minecraftforge.event.world."
-   "net.minecraftforge.client.event."
-   "net.minecraftforge.client.event.sound."
-   "cpw.mods.fml.client.event."])
+  (atom
+    ["net.minecraftforge.fml.common.event."
+     "net.minecraftforge.fml.client.event."
+     "net.minecraftforge.event."
+     "net.minecraftforge.event.brewing."
+     "net.minecraftforge.event.entity."
+     "net.minecraftforge.event.entity.item."
+     "net.minecraftforge.event.entity.living."
+     "net.minecraftforge.event.entity.minecraft."
+     "net.minecraftforge.event.entity.player."
+     "net.minecraftforge.event.terraingen."
+     "net.minecraftforge.event.world."
+     "net.minecraftforge.client.event."
+     "net.minecraftforge.client.event.sound."]))
+
+
 
 (defn try-to-resolve-event
   "Given a list of event packages, will try to use Class/forName to resolve the given event as a Class.
@@ -31,7 +32,7 @@
     event
     (try
       (Class/forName (str (first event-list) event))
-      (catch Exception e
+      (catch Exception _
         (try-to-resolve-event (rest event-list) event)))))
 
 (defn get-event-from-key
@@ -39,7 +40,7 @@
   classname generated from the keyword as a Class, using event-packages as the event-list."
   [k]
   (let [event (gen-classname (name k))]
-    (try-to-resolve-event event-packages event)))
+    (try-to-resolve-event @event-packages event)))
 
 (defn gen-event-signiture
   "Creates a method signiture for the given map entry containing things pertaining to events.
@@ -72,7 +73,7 @@
         prefix (str handler-name "-")]
     `(do
        (gen-class
-        :name ~fullname
-        :prefix ~prefix
-        :methods ~signitures)
+         :name ~fullname
+         :prefix ~prefix
+         :methods ~signitures)
        (def ~handler-name (new ~fullname)))))

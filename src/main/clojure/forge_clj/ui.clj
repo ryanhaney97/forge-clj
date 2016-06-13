@@ -4,14 +4,12 @@
    [forge-clj.core :refer [defclass]]
    [forge-clj.util :refer [get-fullname with-prefix]])
   (:import
-   [cpw.mods.fml.common.network IGuiHandler NetworkRegistry]
+   [net.minecraftforge.fml.common.network IGuiHandler]
    [net.minecraft.inventory Container Slot IInventory]
-   [net.minecraft.entity.player EntityPlayer]
-   [net.minecraft.item ItemStack]
    [java.util List]))
 
 (defmacro defguihandler
-  "MACRO: Creates an anonymouse instance of an IGuiHandler with the specified name, server function, and client function."
+  "MACRO: Creates an anonymous instance of an IGuiHandler with the specified name, server function, and client function."
   [handler-name server-fn client-fn]
   `(def ~handler-name (reify IGuiHandler
                         (~'getServerGuiElement [~'this ~'id ~'player ~'world ~'x ~'y ~'z]

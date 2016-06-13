@@ -2,37 +2,52 @@
   "Large variety of utility functions and macros that are just plain useful.
   Available to both Client and Server."
   (:require
-   [clojure.string :as string]
-   [clojure.set :as cset])
+    [clojure.string :as string])
   (:import
-   [java.util Random]
-   [java.lang.reflect Field]
-   [net.minecraft.block Block]
-   [net.minecraft.item Item ItemStack]
-   [net.minecraft.entity Entity]
-   [net.minecraft.entity.player EntityPlayer]
-   [net.minecraft.entity.item EntityItem]
-   [net.minecraft.util ChatComponentText Vec3 MovingObjectPosition]
-   [net.minecraft.inventory IInventory]
-   [net.minecraft.server MinecraftServer]
-   [net.minecraft.world World]
-   [cpw.mods.fml.common.registry GameRegistry]))
+    [java.lang.reflect Field Modifier]
+    [net.minecraft.block Block]
+    [net.minecraft.item Item ItemStack]
+    [net.minecraft.entity Entity]
+    [net.minecraft.entity.player EntityPlayer]
+    [net.minecraft.entity.item EntityItem]
+    [net.minecraft.util ChatComponentText Vec3 MovingObjectPosition BlockPos]
+    [net.minecraft.inventory IInventory]
+    [net.minecraft.server MinecraftServer]
+    [net.minecraft.world World]
+    [net.minecraftforge.fml.common.registry GameRegistry]
+    [net.minecraft.init Bootstrap]))
 
 (defn get-field
   "Access to private or protected field.  field-name is a symbol or
   keyword."
   [obj ^Class klass field-name]
-  (-> klass (.getDeclaredField (name field-name))
-      (doto (.setAccessible true))
+  (-> klass
+      (.getDeclaredField (name field-name))
+      ^Field (doto (.setAccessible true))
       (.get obj)))
 
 (defn set-field
   "Sets a private or protected field.  field-name is a symbol or
   keyword."
-  [obj ^Class klass field-name value]
+  [obj ^Class klass field-name value & final?]
   (-> klass (.getDeclaredField (name field-name))
-      (doto (.setAccessible true))
+      ^Field (#(if final?
+                (let [^Field field (doto ^Field %1 (.setAccessible true))
+                      ^Field mod-field (doto ^Field (.getDeclaredField Field "modifiers") (.setAccessible true))]
+                  (.setInt mod-field field (bit-and-not (.getModifiers field) Modifier/FINAL))
+                  field)
+                (doto ^Field %1 (.setAccessible true))))
       (.set obj value)))
+
+(defn ensure-registered []
+  (if (not (.getObject Block/blockRegistry (net.minecraft.util.ResourceLocation. "air")))
+    (Block/registerBlocks))
+  (try
+    (set-field nil Bootstrap "field_151355_a" true)
+    (catch Exception e
+      (set-field nil Bootstrap "alreadyRegistered" true))))
+
+(ensure-registered)
 
 (defn gen-method
   "Given a key word, returns a java method as a symbol by capitalizing all but the first word."
@@ -78,7 +93,7 @@
   For each def/defn/def-/defn- statement within the macro, adds the prefix onto the name in each statement."
   [prefix & defs]
   (let [per-def (fn [possible-def]
-                  (if (or (= (first possible-def) 'def) (= (first possible-def) 'defn) (= (first possible-def) 'def-) (= (first possible-def) 'defn-) (= (first possible-def) `def) (= (first possible-def) `defn) (= (first possible-def) `def-) (= (first possible-def) `defn-))
+                  (if (or (= (first possible-def) 'def) (= (first possible-def) 'defn) (= (first possible-def) 'def-) (= (first possible-def) 'defn-) (= (first possible-def) `def) (= (first possible-def) `defn) (= (first possible-def) `defn-))
                     (let [first-val (first possible-def)
                           def-name (second possible-def)
                           def-name (symbol (str prefix def-name))
@@ -91,7 +106,7 @@
 (defn get-tile-entity-at
   "Gets the tile entity in the world at the specified coordinates. For convenience."
   [^World world x y z]
-  (.getTileEntity world (int x) (int y) (int z)))
+  (.getTileEntity world (BlockPos. (int x) (int y) (int z))))
 
 (defn get-extended-properties
   "Gets the extended entity properties from the specified entity with the provided string id."
@@ -109,8 +124,8 @@
   (.-worldServers ^MinecraftServer (MinecraftServer/getServer)))
 
 (defmulti make-itemstack
-  "Multimethod used by itemstack to make itemstacks."
-  (fn [item amount metadata] (type item)))
+          "Multimethod used by itemstack to make itemstacks."
+          (fn [item amount metadata] (type item)))
 (defmethod make-itemstack Item [^Item item amount metadata]
   (ItemStack. item (int amount) (int metadata)))
 (defmethod make-itemstack Block [^Block block amount metadata]
@@ -164,8 +179,8 @@
   [memo-name arg-vector & args]
   `(def ~memo-name
      (memoize
-      (fn ~arg-vector
-        ~@args))))
+       (fn ~arg-vector
+         ~@args))))
 
 (defn get-item
   "Given the mod-id and the item name separated by a :,
@@ -194,7 +209,7 @@
 
 (defn drop-items [^World world x y z]
   "Given the world, x, y, and z coordinates of a tile entity implementing IInventory, drops the items contained in the inventory."
-  (let [tile-entity (.getTileEntity world (int x) (int y) (int z))]
+  (let [tile-entity (.getTileEntity world (BlockPos. (int x) (int y) (int z)))]
     (if (instance? IInventory tile-entity)
       (let [tile-entity ^IInventory tile-entity
             per-stack (fn [^ItemStack istack]
@@ -215,10 +230,11 @@
 (defn get-look-coords
   "Given the current player and the world, gets the coordinates and the block side hit that the player is looking at."
   [^EntityPlayer player ^World world]
-  (let [^Vec3 pos-vec (Vec3/createVectorHelper (.-posX player) (+ (.-posY player) (.getEyeHeight player)) (.-posZ player))
+  (let [^Vec3 pos-vec (Vec3. (.-posX player) (+ (.-posY player) (.getEyeHeight player)) (.-posZ player))
         ^Vec3 look-vec (.getLookVec player)
-        ^MovingObjectPosition mop (.rayTraceBlocks world pos-vec look-vec)]
-    [(.-blockX mop) (.-blockY mop) (.-blockZ mop) (.-sideHit mop)]))
+        ^MovingObjectPosition mop (.rayTraceBlocks world pos-vec look-vec)
+        ^BlockPos mop-block-position (.getBlockPos mop)]
+    [(.getX mop-block-position) (.getY mop-block-position) (.getZ mop-block-position) (.-sideHit mop)]))
 
 (defn deep-merge
   "Recursively merges maps. If keys are not maps, the last value wins. (Found on google)."
@@ -232,3 +248,55 @@
   Not a macro like Clojure's new keyword, so can be used with class names that are stored in symbols."
   [klass & args]
   (clojure.lang.Reflector/invokeConstructor klass (into-array Object args)))
+
+;(defn fill-blocks-class []
+;  (let [dummy-block (Block. net.minecraft.block.material.Material/rock)
+;        dummy-fields (apply merge (map #(hash-map (keyword (.getName ^Field %1)) dummy-block) (into [] (.getFields net.minecraft.init.Blocks))))
+;        other-fields {:log (net.minecraft.block.BlockLog)
+;                      :grass (proxy [net.minecraft.block.BlockGrass] [])
+;                      :flowing_water (proxy [net.minecraft.block.BlockDynamicLiquid] [net.minecraft.block.material.Material/water])
+;                      :water (proxy [net.minecraft.block.BlockStaticLiquid] [net.minecraft.block.material.Material/water])
+;                      :flowing_lava (proxy [net.minecraft.block.BlockDynamicLiquid] [net.minecraft.block.material.Material/lava])
+;                      :lava (proxy [net.minecraft.block.BlockStaticLiquid] [net.minecraft.block.material.Material/lava])
+;                      :sand (net.minecraft.block.BlockSand.)
+;                      :leaves (net.minecraft.block.BlockOldLeaf.)
+;                      :leaves2 (net.minecraft.block.BlockNewLeaf.)
+;                      :sticky_piston (net.minecraft.block.BlockPistonBase. true)
+;                      :tallgrass (proxy [net.minecraft.block.BlockTallGrass] [])
+;                      :deadbush (proxy [net.minecraft.block.BlockDeadBush] [])
+;                      :piston (net.minecraft.block.BlockPistonBase. false)
+;                      :piston_head (net.minecraft.block.BlockPistonExtension.)
+;                      :piston_extension (net.minecraft.block.BlockPistonMoving.)
+;                      :yellow_flower (proxy [net.minecraft.block.BlockYellowFlower] [])
+;                      :red_flower (proxy [net.minecraft.block.BlockRedFlower] [])
+;                      :brown_mushroom (proxy [net.minecraft.block.BlockBush] [])
+;                      :red_mushroom (proxy [net.minecraft.block.BlockBush] [])
+;                      :double_stone_slab (net.minecraft.block.BlockDoubleStoneSlab.)
+;                      :stone_slab (net.minecraft.block.BlockHalfStoneSlab.)
+;                      :fire (proxy [net.minecraft.block.BlockFire] [])
+;                      :chest (proxy [net.minecraft.block.BlockChest] [0])
+;                      :redstone_wire (net.minecraft.block.BlockRedstoneWire.)
+;                      :cactus (proxy [net.minecraft.block.BlockCactus] [])
+;                      :reeds (proxy [net.minecraft.block.BlockReed] [])
+;                      :portal (net.minecraft.block.BlockPortal.)
+;                      :unpowered_repeater (proxy [net.minecraft.block.BlockRedstoneRepeater] [false])
+;                      :powered_repeater (proxy [net.minecraft.block.BlockRedstoneRepeater] [true])
+;                      :mycelium (proxy [net.minecraft.block.BlockMycelium] [])
+;                      :cauldron (net.minecraft.block.BlockCauldron.)
+;                      :double_wooden_slab (net.minecraft.block.BlockDoubleWoodSlab.)
+;                      :wooden_slab (net.minecraft.block.BlockHalfWoodSlab.)
+;                      :tripwire_hook (net.minecraft.block.BlockTripWireHook.)
+;                      :beacon (net.minecraft.block.BlockBeacon.)
+;                      :skull (proxy [net.minecraft.block.BlockSkull] [])
+;                      :unpowered_comparator (net.minecraft.block.BlockRedstoneComparator. false)
+;                      :powered_comparator (net.minecraft.block.BlockRedstoneComparator. true)
+;                      :daylight_detector (net.minecraft.block.BlockDaylightDetector. false)
+;                      :daylight_detector_inverted (net.minecraft.block.BlockDaylightDetector. true)
+;                      :hopper (net.minecraft.block.BlockHopper.)
+;                      :double_plant (net.minecraft.block.BlockDoublePlant.)
+;                      :stained_glass (net.minecraft.block.BlockStainedGlass. net.minecraft.block.material.Material/glass)
+;                      :stained_glass_pane (net.minecraft.block.BlockStainedGlassPane.)
+;                      :double_stone_slab2 (net.minecraft.block.BlockDoubleStoneSlabNew.)
+;                      :stone_slab2 (net.minecraft.block.BlockHalfStoneSlabNew.)}
+;        fields (merge dummy-fields other-fields)]
+;    (dorun (map #(set-field nil net.minecraft.init.Blocks (key %1) (val %1) true) fields))))

@@ -8,9 +8,9 @@
    [clojure.string :as string])
   (:import
    [net.minecraft.nbt NBTTagCompound]
-   [cpw.mods.fml.relauncher Side]
-   [cpw.mods.fml.common.network ByteBufUtils NetworkRegistry]
-   [cpw.mods.fml.common.network.simpleimpl IMessage IMessageHandler SimpleNetworkWrapper]
+   [net.minecraftforge.fml.relauncher Side]
+   [net.minecraftforge.fml.common.network ByteBufUtils NetworkRegistry]
+   [net.minecraftforge.fml.common.network.simpleimpl IMessage IMessageHandler SimpleNetworkWrapper]
    [io.netty.buffer ByteBuf]))
 
 ;The following generates a class for forge-clj itself that serves as the default packet
@@ -20,7 +20,7 @@
 
 ;------------------------------------------------------------------------------------------
 
-(defclass nbt-packet {:implements [cpw.mods.fml.common.network.simpleimpl.IMessage]
+(defclass nbt-packet {:implements [net.minecraftforge.fml.common.network.simpleimpl.IMessage]
                       :constructors {[clojure.lang.PersistentArrayMap] []
                                      [] []}
                       :state data
@@ -56,7 +56,7 @@
   [handler-name on-message]
   (let [prefix (str handler-name "-")]
     `(do
-       (defclass ~handler-name {:implements [cpw.mods.fml.common.network.simpleimpl.IMessageHandler]})
+       (defclass ~handler-name {:implements [net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler]})
        (with-prefix ~prefix
          (defn ~'onMessage [~'this ~'message ~'context]
            (~on-message (deref (.-data ~(with-meta 'message `{:tag NbtPacket}))) ~'context))))))

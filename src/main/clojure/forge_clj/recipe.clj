@@ -5,7 +5,7 @@
    [clojure.string :as string])
   (:import
    [net.minecraft.item ItemStack]
-   [cpw.mods.fml.common.registry GameRegistry]))
+   [net.minecraftforge.fml.common.registry GameRegistry]))
 
 (defn convert-recipe
   "Converts a shaped recipe specified in the addrecipe function,

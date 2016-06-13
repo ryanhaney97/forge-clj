@@ -6,7 +6,6 @@
   (:import
    [net.minecraft.tileentity TileEntity]
    [net.minecraft.entity Entity]
-   [net.minecraft.client Minecraft]
    [net.minecraft.client.renderer.tileentity TileEntitySpecialRenderer]
    [net.minecraft.client.model ModelBase ModelRenderer]
    [org.lwjgl.opengl GL11]))
@@ -83,7 +82,7 @@
         memo? (:memo? options)
         memo-test? (:memo-test? options)
         options (dissoc options :texture :memo? :memo-test?)
-        render-tile-entity-at `(fn [~'entity ~'x ~'y ~'z ~'f]
+        render-tile-entity-at `(fn [~'entity ~'x ~'y ~'z ~'particle-ticks ~'destroy-stage]
                                  (GL11/glPushMatrix)
                                  (GL11/glTranslated ~'x ~'y ~'z)
                                  ~(if texture

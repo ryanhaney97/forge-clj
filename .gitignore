@@ -11,3 +11,9 @@ gradlew.bat
 logs/
 update-test
 tutorial.md
+/update-test.sh
+/forge-clj.iws
+/forge-clj.ipr
+/forge-clj.iml
+/out/
+/build/

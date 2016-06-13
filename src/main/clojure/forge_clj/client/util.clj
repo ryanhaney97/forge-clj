@@ -5,7 +5,7 @@
   (:import
    [net.minecraft.client.renderer.texture TextureManager]
    [net.minecraft.client Minecraft]
-   [net.minecraft.util ResourceLocation MovingObjectPosition]
+   [net.minecraft.util ResourceLocation MovingObjectPosition BlockPos]
    [org.lwjgl.opengl GL11]))
 
 (defn minecraft-instance
@@ -21,9 +21,10 @@
 (defn get-tile-entity-looked-at
   "Gets the tile entity the player is looking at."
   []
-  (let [^MovingObjectPosition mop (.rayTrace (.-renderViewEntity ^Minecraft (minecraft-instance)) 200 1.0)]
+  (let [^MovingObjectPosition mop (.rayTrace (.getRenderViewEntity ^Minecraft (minecraft-instance)) 200 1.0)
+        ^BlockPos block-pos (.getBlockPos mop)]
     (if mop
-      (get-tile-entity-at (first (server-worlds)) (.-blockX mop) (.-blockY mop) (.-blockZ mop)))))
+      (get-tile-entity-at (client-world) (.getX block-pos) (.getY block-pos) (.getZ block-pos)))))
 
 (defn resource-location
   "Given a string representing a ResourceLocation, creates a ResourceLocation for the provided string."
@@ -32,9 +33,11 @@
 
 (defn bind-texture
   "Given a string representing a ResourceLocation, binds a texture to the TextureManager."
-  [texture-location]
+  ([texture-location minecraft]
   (let [resource (resource-location texture-location)]
-    (.bindTexture ^TextureManager (.getTextureManager ^Minecraft (minecraft-instance)) resource)))
+    (.bindTexture ^TextureManager (.getTextureManager ^Minecraft minecraft) resource)))
+  ([texture-location]
+    (bind-texture texture-location (minecraft-instance))))
 
 (defn set-gl-color
   "Given a rgb value, and optionally an alpha value, sets the GL11 color to the specified values."

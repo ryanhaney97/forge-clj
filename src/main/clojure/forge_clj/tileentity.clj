@@ -3,8 +3,7 @@
   (:require
    [forge-clj.nbt :refer [read-tag-data! write-tag-data! map->nbt nbt->map]]
    [forge-clj.core :refer [defassocclass]]
-   [forge-clj.util :refer [get-fullname with-prefix]]
-   [clojure.string :as string])
+   [forge-clj.util :refer [get-fullname with-prefix]])
   (:import
    [net.minecraft.nbt NBTTagCompound]
    [net.minecraft.tileentity TileEntity]
@@ -42,6 +41,6 @@
            (~on-save ~this-sym)
            (write-tag-data! (~'.-data ~this-sym) ~'compound))
          (defn ~'getDescriptionPacket [~'this]
-           (S35PacketUpdateTileEntity. (.-xCoord ~this-sym) (.-yCoord ~this-sym) (.-zCoord ~this-sym) 1 (map->nbt (select-keys (deref (~'.-data ~this-sym)) ~sync-data) (NBTTagCompound.))))
+           (S35PacketUpdateTileEntity. (.getPos ~this-sym) (.getBlockMetadata ~this-sym) (map->nbt (select-keys (deref (~'.-data ~this-sym)) ~sync-data) (NBTTagCompound.))))
          (defn ~'onDataPacket [~'this ~'network-manager ~(with-meta 'packet `{:tag S35PacketUpdateTileEntity})]
-           (swap! (~'.-data ~this-sym) merge (nbt->map (.func_148857_g ~'packet))))))))
+           (swap! (~'.-data ~this-sym) merge (nbt->map (.getNbtCompound ~'packet))))))))
