@@ -4,12 +4,15 @@
   (:require
     [clojure.string :as string]
     [clojure.set :as cset]
-    [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys set-field ensure-registered]])
+    [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys set-field ensure-registered]]
+    [clojure.core.async :refer [chan pub >!!]])
   (:import
     [net.minecraftforge.fml.common Mod Mod$EventHandler FMLCommonHandler]
     [net.minecraftforge.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
 (declare client?)
+(def init-chan (chan))
+(def init-pub (pub init-chan identity))
 
 (defmacro defmod
   "MACRO: Takes the current user namespace, the name of the mod, the version, and a rest argument evaled as a map.
@@ -254,6 +257,9 @@
 
 (with-prefix forge-clj-
              (defn preInit [_ _]
-               (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
+               (def client? (.isClient (.getSide (FMLCommonHandler/instance))))
+               (>!! init-chan :server)
+               (if client?
+                 (>!! init-chan :client)))
              (defn init [_ _])
              (defn postInit [_ _]))
