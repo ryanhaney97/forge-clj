@@ -58,7 +58,6 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 	
 	shade 'org.clojure:clojure:1.8.0'
-	shade 'org.clojure:core.async:0.2.382'
 }
 
 jar {
@@ -70,9 +69,7 @@ jar {
 }
 
 task deobfJar(type: Jar) {
-    from(sourceSets.main.output){
-		exclude 'clojure', 'clojure/**'
-	}
+    from sourceSets.main.output
     classifier = 'dev'
 }
 
@@ -97,3 +94,5 @@ processResources
         exclude 'mcmod.info'
     }
 }
+
+idea { module { inheritOutputDirs = true } }
