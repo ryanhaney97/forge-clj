@@ -100,6 +100,13 @@
   (let [packet (NbtPacket. nbt-map)]
     (.sendToAll network packet)))
 
+(defn send-to-server
+  "Sends a message from the client to the server along the specified network.
+  Message is in the form of a map."
+  [^SimpleNetworkWrapper network nbt-map]
+  (let [packet (NbtPacket. nbt-map)]
+    (.sendToServer network packet)))
+
 (defn partition-fc-network [send-map]
   (if (:receive send-map)
     (keyword (str "receive-" (name (:receive send-map))))
@@ -147,3 +154,9 @@
     (while true
       (let [nbt-map (<! net-sub)]
         (send-to-all fc-network-wrapper (dissoc nbt-map :send))))))
+
+(let [net-sub (sub fc-network-receive :send-server (chan))]
+  (go
+    (while true
+      (let [nbt-map (<! net-sub)]
+        (send-to-server fc-network-wrapper (dissoc nbt-map :send))))))
