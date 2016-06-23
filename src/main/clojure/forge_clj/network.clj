@@ -108,7 +108,6 @@
     (.sendToServer network packet)))
 
 (defn partition-fc-network [send-map]
-  (println (type (:id send-map)))
   (if (:send send-map)
     (keyword (str "send-" (name (:send send-map :all))))
     (:id send-map)))

@@ -259,7 +259,8 @@
              (defn preInit [_ _]
                (def client? (.isClient (.getSide (FMLCommonHandler/instance))))
                (>!! init-chan :server)
-               (if client?
+               (when client?
+                 (require 'forge-clj.client.network)
                  (>!! init-client-chan :client)))
              (defn init [_ _])
              (defn postInit [_ _]))
