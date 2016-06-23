@@ -1,6 +1,6 @@
 (ns forge-clj.client.network
   (:require
-    [forge-clj.core :refer [init-pub]]
+    [forge-clj.core :refer [init-client-chan]]
     [forge-clj.network :refer [register-message fc-network-wrapper fc-network-send fc-network-receive gen-packet-handler]]
     [forge-clj.client.util :refer [minecraft-instance]]
     [clojure.core.async :refer [chan go >!! <!! <! >! pub sub] :as async])
@@ -13,15 +13,15 @@
         nbt-map (assoc nbt-map :player (.-thePlayer ^Minecraft (:minecraft nbt-map))
                                :world (.-theWorld ^Minecraft (:minecraft nbt-map))
                                :context context
-                               :receive :client)]
+                               :receive (:id nbt-map :client))]
     (.addScheduledTask ^Minecraft (:minecraft nbt-map)
                        (reify Runnable
                          (run [_]
-                           (>!! fc-network-send nbt-map))))))
+                           (>!! fc-network-send nbt-map))))
+    nil))
 
 (gen-packet-handler fc-client-packet-handler on-packet-from-server)
 
-(let [init-sub (sub init-pub :client (chan))]
-  (go
-    (<! init-sub)
-    (register-message fc-network-wrapper fc-client-packet-handler 1 :client)))
+(go
+  (<! init-client-chan)
+  (register-message fc-network-wrapper fc-client-packet-handler 1 :client))

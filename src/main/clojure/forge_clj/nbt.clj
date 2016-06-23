@@ -2,19 +2,22 @@
   "Contains various functions to handle conversion between clojure maps and nbt data.
   Not generally needed by the user, but used often by forge-clj."
   (:require
-   [clojure.string :as string])
+    [clojure.string :as string])
   (:import
-   [net.minecraft.nbt NBTBase NBTTagCompound NBTTagByte NBTTagShort NBTTagInt NBTTagLong NBTTagFloat NBTTagDouble NBTTagByteArray NBTTagIntArray NBTTagString NBTTagList]
-   [net.minecraft.item ItemStack]))
+    [net.minecraft.nbt NBTBase NBTTagCompound NBTTagByte NBTTagShort NBTTagInt NBTTagLong NBTTagFloat NBTTagDouble NBTTagByteArray NBTTagIntArray NBTTagString NBTTagList]
+    [net.minecraft.item ItemStack]))
 
 (defn string-tag-handler
   "Handles certain types of strings to handle true, false, and nil values."
   [s]
-  (condp = (string/trim (string/trim-newline s))
-    "true" true
-    "false" false
-    "nil" nil
-    s))
+  (let [s (string/trim (string/trim-newline s))]
+    (if (= (first s) \:)
+      (keyword (apply str (rest s)))
+      (condp = s
+        "true" true
+        "false" false
+        "nil" nil
+        s))))
 
 (defn load-istack
   "Given a key and a compound tag, gets an itemstack from the tag."

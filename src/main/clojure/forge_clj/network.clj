@@ -3,7 +3,7 @@
   and related network implementations."
   (:require
     [forge-clj.nbt :refer [nbt->map map->nbt]]
-    [forge-clj.core :refer [defclass init-pub]]
+    [forge-clj.core :refer [defclass init-chan]]
     [forge-clj.util :refer [get-fullname with-prefix]]
     [clojure.core.async :refer [chan go >!! <!! <! >! pub sub] :as async])
   (:import
@@ -23,7 +23,7 @@
 ;------------------------------------------------------------------------------------------
 
 (defclass nbt-packet {:implements [net.minecraftforge.fml.common.network.simpleimpl.IMessage]
-                      :constructors {[clojure.lang.PersistentHashMap] []
+                      :constructors {[clojure.lang.PersistentArrayMap] []
                                      [] []}
                       :state data
                       :init init})
@@ -108,32 +108,32 @@
     (.sendToServer network packet)))
 
 (defn partition-fc-network [send-map]
-  (if (:receive send-map)
-    (keyword (str "receive-" (name (:receive send-map))))
-    (keyword (str "send-" (name (:send send-map :all))))))
+  (println (type (:id send-map)))
+  (if (:send send-map)
+    (keyword (str "send-" (name (:send send-map :all))))
+    (:id send-map)))
 
 (declare fc-network-wrapper)
 
-(def fc-network-send (chan))
+(def fc-network-send (chan 10))
 (def fc-network-receive (pub fc-network-send partition-fc-network))
 
 (defn on-packet-from-client [nbt-map ^MessageContext context]
   (let [nbt-map (assoc nbt-map :player (.-playerEntity (.getServerHandler context)))
         nbt-map (assoc nbt-map :world (.getServerForPlayer ^EntityPlayerMP (:player nbt-map))
-                               :context context
-                               :receive :server)]
+                               :context context)]
     (.addScheduledTask ^WorldServer (:world nbt-map)
                        (reify Runnable
                          (run [_]
-                           (>!! fc-network-send nbt-map))))))
+                           (>!! fc-network-send nbt-map))))
+    nil))
 
 (gen-packet-handler fc-common-packet-handler on-packet-from-client)
 
-(let [init-sub (sub init-pub :server (chan))]
-  (go
-    (<! init-sub)
-    (def fc-network-wrapper (create-network "fc-network-wrapper"))
-    (register-message fc-network-wrapper fc-common-packet-handler 0 :server)))
+(go
+  (<! init-chan)
+  (def fc-network-wrapper (create-network "fc-network-wrapper"))
+  (register-message fc-network-wrapper fc-common-packet-handler 0 :server))
 
 (let [net-sub (sub fc-network-receive :send-to (chan))]
   (go
