@@ -64,7 +64,7 @@
              (write-tag-data! data# ~'compound)
              (swap! data# merge not-saved#)))
          (defn ~'init [~'this ~'entity ~'world]
-           (when (not (empty? sync-data))
+           (when (not (empty? ~sync-data))
              (if (remote? ~'world)
                (let [client-sub# (sub fc-network-receive ~client-sync-event (chan))]
                  (go

@@ -217,7 +217,8 @@
   This also means that those labeled as using this macro are also macros unless specified otherwise."
   ([superclass class-name classdata]
    (let [name-ns (get classdata :ns *ns*)
-         on-change (:on-change classdata (constantly nil))
+         on-change (:on-change classdata (fn [& _]
+                                           nil))
          classdata (dissoc classdata :on-change)
          classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
                                     :init 'initialize
