@@ -217,6 +217,8 @@
   This also means that those labeled as using this macro are also macros unless specified otherwise."
   ([superclass class-name classdata]
    (let [name-ns (get classdata :ns *ns*)
+         on-change (:on-change classdata (constantly nil))
+         classdata (dissoc classdata :on-change)
          classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
                                     :init 'initialize
                                     :state 'data)
@@ -231,6 +233,7 @@
                        [[] (atom ~fields)])
                      (defn ~'assoc [~'this ~'obj-key ~'obj-val]
                        (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
+                       (~on-change ~'this ~'obj-key ~'obj-val)
                        ~'this)
                      (defn ~'conj [~'this ~'obj]
                        (swap! (~'.-data ~this-sym) conj ~'obj)
