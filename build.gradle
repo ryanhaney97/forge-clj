@@ -58,6 +58,10 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 	
 	shade 'org.clojure:clojure:1.8.0'
+	shade('org.clojure:core.async:0.2.382')
+	{
+		exclude group: 'org.ow2.asm'
+	}
 }
 
 jar {

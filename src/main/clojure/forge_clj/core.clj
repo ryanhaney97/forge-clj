@@ -4,12 +4,15 @@
   (:require
     [clojure.string :as string]
     [clojure.set :as cset]
-    [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys set-field ensure-registered]])
+    [forge-clj.util :refer [gen-method gen-setter gen-classname get-fullname with-prefix deep-merge construct update-map-keys set-field ensure-registered]]
+    [clojure.core.async :refer [chan pub >!! <!! sub]])
   (:import
     [net.minecraftforge.fml.common Mod Mod$EventHandler FMLCommonHandler]
     [net.minecraftforge.fml.common.event FMLPreInitializationEvent FMLInitializationEvent FMLPostInitializationEvent]))
 
 (declare client?)
+(def init-chan (chan 1))
+(def init-client-chan (chan 1))
 
 (defmacro defmod
   "MACRO: Takes the current user namespace, the name of the mod, the version, and a rest argument evaled as a map.
@@ -214,6 +217,8 @@
   This also means that those labeled as using this macro are also macros unless specified otherwise."
   ([superclass class-name classdata]
    (let [name-ns (get classdata :ns *ns*)
+         on-change (:on-change classdata `(constantly nil))
+         classdata (dissoc classdata :on-change)
          classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
                                     :init 'initialize
                                     :state 'data)
@@ -228,6 +233,7 @@
                        [[] (atom ~fields)])
                      (defn ~'assoc [~'this ~'obj-key ~'obj-val]
                        (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
+                       (~on-change ~'this ~'obj-key ~'obj-val)
                        ~'this)
                      (defn ~'conj [~'this ~'obj]
                        (swap! (~'.-data ~this-sym) conj ~'obj)
@@ -254,6 +260,10 @@
 
 (with-prefix forge-clj-
              (defn preInit [_ _]
-               (def client? (.isClient (.getSide (FMLCommonHandler/instance)))))
+               (def client? (.isClient (.getSide (FMLCommonHandler/instance))))
+               (>!! init-chan :server)
+               (when client?
+                 (require 'forge-clj.client.network)
+                 (>!! init-client-chan :client)))
              (defn init [_ _])
              (defn postInit [_ _]))

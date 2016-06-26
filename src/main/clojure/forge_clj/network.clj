@@ -2,16 +2,19 @@
   "Contains macros, classes, and functions involving the SimpleNetworkWrapper,
   and related network implementations."
   (:require
-   [forge-clj.nbt :refer [nbt->map map->nbt]]
-   [forge-clj.core :refer [defclass]]
-   [forge-clj.util :refer [get-fullname with-prefix]]
-   [clojure.string :as string])
+    [forge-clj.nbt :refer [nbt->map map->nbt]]
+    [forge-clj.core :refer [defclass init-chan]]
+    [forge-clj.util :refer [get-fullname with-prefix]]
+    [clojure.core.async :refer [chan go >!! <!! <! >! pub sub] :as async])
   (:import
-   [net.minecraft.nbt NBTTagCompound]
-   [net.minecraftforge.fml.relauncher Side]
-   [net.minecraftforge.fml.common.network ByteBufUtils NetworkRegistry]
-   [net.minecraftforge.fml.common.network.simpleimpl IMessage IMessageHandler SimpleNetworkWrapper]
-   [io.netty.buffer ByteBuf]))
+    [net.minecraft.nbt NBTTagCompound]
+    [net.minecraftforge.fml.relauncher Side]
+    [net.minecraftforge.fml.common.network ByteBufUtils NetworkRegistry NetworkRegistry$TargetPoint]
+    [net.minecraftforge.fml.common.network.simpleimpl IMessage IMessageHandler SimpleNetworkWrapper MessageContext]
+    [io.netty.buffer ByteBuf]
+    [net.minecraft.entity.player EntityPlayerMP]
+    [net.minecraft.entity Entity]
+    [net.minecraft.world WorldServer]))
 
 ;The following generates a class for forge-clj itself that serves as the default packet
 ;used by its networking functions.
@@ -27,21 +30,21 @@
                       :init init})
 
 (with-prefix nbt-packet-
-  (defn init
-    ([]
-     [[] (atom {})])
-    ([nbt-map]
-     [[] (atom nbt-map)]))
+             (defn init
+               ([]
+                [[] (atom {})])
+               ([nbt-map]
+                [[] (atom nbt-map)]))
 
-  (defn fromBytes [^NbtPacket this ^ByteBuf buf]
-    (let [nbt-data (ByteBufUtils/readTag buf)
-          converted-data (nbt->map nbt-data)]
-      (reset! (.-data this) converted-data)))
+             (defn fromBytes [^NbtPacket this ^ByteBuf buf]
+               (let [nbt-data (ByteBufUtils/readTag buf)
+                     converted-data (nbt->map nbt-data)]
+                 (reset! (.-data this) converted-data)))
 
-  (defn toBytes [^NbtPacket this ^ByteBuf buf]
-    (let [converted-data (deref (.-data this))
-          nbt-data (map->nbt converted-data (NBTTagCompound.))]
-      (ByteBufUtils/writeTag buf nbt-data))))
+             (defn toBytes [^NbtPacket this ^ByteBuf buf]
+               (let [converted-data (deref (.-data this))
+                     nbt-data (map->nbt converted-data (NBTTagCompound.))]
+                 (ByteBufUtils/writeTag buf nbt-data))))
 
 ;------------------------------------------------------------------------------------------
 
@@ -58,8 +61,8 @@
     `(do
        (defclass ~handler-name {:implements [net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler]})
        (with-prefix ~prefix
-         (defn ~'onMessage [~'this ~'message ~'context]
-           (~on-message (deref (.-data ~(with-meta 'message `{:tag NbtPacket}))) ~'context))))))
+                    (defn ~'onMessage [~'this ~'message ~'context]
+                      (~on-message (deref (.-data ~(with-meta 'message `{:tag NbtPacket}))) ~'context))))))
 
 (defn create-network
   "Creates a network (aka a SimpleNetworkWrapper) given the network name."
@@ -84,12 +87,20 @@
   (let [packet (NbtPacket. nbt-map)]
     (.sendTo network packet target)))
 
+(defn get-target-point [entity range]
+  (if (instance? Entity entity)
+    (NetworkRegistry$TargetPoint. (.-dimension ^Entity entity) (.-posX ^Entity entity) (.-posY ^Entity entity) (.-posZ ^Entity entity) range)
+    entity))
+
 (defn send-to-all-around
   "Sends a message along the specified network from the server to the clients around the specified target.
   Message is in the form of a map"
+  ([^SimpleNetworkWrapper network nbt-map target range]
+   (let [packet (NbtPacket. nbt-map)
+         target (get-target-point target range)]
+     (.sendToAllAround network packet target)))
   ([^SimpleNetworkWrapper network nbt-map target]
-   (let [packet (NbtPacket. nbt-map)]
-     (.sendToAllAround network packet target))))
+    (send-to-all-around network nbt-map target 1000)))
 
 (defn send-to-all
   "Sends a message along the specified network from the server to all clients.
@@ -104,3 +115,57 @@
   [^SimpleNetworkWrapper network nbt-map]
   (let [packet (NbtPacket. nbt-map)]
     (.sendToServer network packet)))
+
+(defn partition-fc-network [send-map]
+  (if (:send send-map)
+    (keyword (str "send-" (name (:send send-map :all))))
+    (:id send-map)))
+
+(declare fc-network-wrapper)
+
+(def fc-network-send (chan 10))
+(def fc-network-receive (pub fc-network-send partition-fc-network))
+
+(defn on-packet-from-client [nbt-map ^MessageContext context]
+  (let [nbt-map (assoc nbt-map :player (.-playerEntity (.getServerHandler context)))
+        nbt-map (assoc nbt-map :world (.getServerForPlayer ^EntityPlayerMP (:player nbt-map))
+                               :context context)]
+    (.addScheduledTask ^WorldServer (:world nbt-map)
+                       (reify Runnable
+                         (run [_]
+                           (>!! fc-network-send nbt-map))))
+    nil))
+
+(gen-packet-handler fc-common-packet-handler on-packet-from-client)
+
+(go
+  (<! init-chan)
+  (def fc-network-wrapper (create-network "fc-network-wrapper"))
+  (register-message fc-network-wrapper fc-common-packet-handler 0 :server))
+
+(let [net-sub (sub fc-network-receive :send-to (chan))]
+  (go
+    (while true
+      (let [nbt-map (<! net-sub)
+            target (:target nbt-map)]
+        (send-to fc-network-wrapper (dissoc nbt-map :send :target) target)))))
+
+(let [net-sub (sub fc-network-receive :send-around (chan))]
+  (go
+    (while true
+      (let [nbt-map (<! net-sub)
+            target (:target nbt-map)
+            range (:range nbt-map 1000)]
+        (send-to-all-around fc-network-wrapper (dissoc nbt-map :send :target :range) target range)))))
+
+(let [net-sub (sub fc-network-receive :send-all (chan))]
+  (go
+    (while true
+      (let [nbt-map (<! net-sub)]
+        (send-to-all fc-network-wrapper (dissoc nbt-map :send))))))
+
+(let [net-sub (sub fc-network-receive :send-server (chan))]
+  (go
+    (while true
+      (let [nbt-map (<! net-sub)]
+        (send-to-server fc-network-wrapper (dissoc nbt-map :send))))))
