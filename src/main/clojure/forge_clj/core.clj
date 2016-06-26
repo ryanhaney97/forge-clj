@@ -252,7 +252,7 @@
 ;----------------------------
 
 (gen-class
-  :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.6.0"}} forge_clj.core.ForgeClj
+  :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.6.1"}} forge_clj.core.ForgeClj
   :prefix "forge-clj-"
   :methods [[^{Mod$EventHandler []} preInit [net.minecraftforge.fml.common.event.FMLPreInitializationEvent] void]
             [^{Mod$EventHandler []} init [net.minecraftforge.fml.common.event.FMLInitializationEvent] void]
