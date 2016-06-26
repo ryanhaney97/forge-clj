@@ -2,6 +2,16 @@
 
 ##Minecraft 1.8.9
 
+###Version 0.6.1
+
+- Added core.async to the project as a whole. It is now a shaded dependency alongside clojure itself.
+
+- Added a new networking system on top of the old one. The old networking system still exists, and in fact, the new one functions by having forge-clj create its own implementation of the old one. It works by using core.async pubs and subs in order to automatically send things rather easily.
+
+- Added a sync mechanism to extended entity properties similar to that of the existing sync mechanism in tile entities, except that it uses the new core.async system in order to perform the sync.
+
+- Added an option for an on-change function to the defassocclass macro, allowing you to do something every time someone uses assoc! on the class (such as syncing data, in this case).
+
 ###Version 0.6.0
 
 - Updated EVERYTHING to 1.8.9, including blocks, items, rendering, the whole package. The only thing missing is all of the chunk provider stuff, which I removed for now until I get around to taking a second look at it.
