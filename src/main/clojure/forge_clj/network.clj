@@ -9,10 +9,11 @@
   (:import
     [net.minecraft.nbt NBTTagCompound]
     [net.minecraftforge.fml.relauncher Side]
-    [net.minecraftforge.fml.common.network ByteBufUtils NetworkRegistry]
+    [net.minecraftforge.fml.common.network ByteBufUtils NetworkRegistry NetworkRegistry$TargetPoint]
     [net.minecraftforge.fml.common.network.simpleimpl IMessage IMessageHandler SimpleNetworkWrapper MessageContext]
     [io.netty.buffer ByteBuf]
     [net.minecraft.entity.player EntityPlayerMP]
+    [net.minecraft.entity Entity]
     [net.minecraft.world WorldServer]))
 
 ;The following generates a class for forge-clj itself that serves as the default packet
@@ -86,12 +87,20 @@
   (let [packet (NbtPacket. nbt-map)]
     (.sendTo network packet target)))
 
+(defn get-target-point [entity range]
+  (if (instance? Entity entity)
+    (NetworkRegistry$TargetPoint. (.-dimension ^Entity entity) (.-posX ^Entity entity) (.-posY ^Entity entity) (.-posZ ^Entity entity) range)
+    entity))
+
 (defn send-to-all-around
   "Sends a message along the specified network from the server to the clients around the specified target.
   Message is in the form of a map"
+  ([^SimpleNetworkWrapper network nbt-map target range]
+   (let [packet (NbtPacket. nbt-map)
+         target (get-target-point target range)]
+     (.sendToAllAround network packet target)))
   ([^SimpleNetworkWrapper network nbt-map target]
-   (let [packet (NbtPacket. nbt-map)]
-     (.sendToAllAround network packet target))))
+    (send-to-all-around network nbt-map target 1000)))
 
 (defn send-to-all
   "Sends a message along the specified network from the server to all clients.
@@ -145,8 +154,9 @@
   (go
     (while true
       (let [nbt-map (<! net-sub)
-            target (:target nbt-map)]
-        (send-to-all-around fc-network-wrapper (dissoc nbt-map :send :target) target)))))
+            target (:target nbt-map)
+            range (:range nbt-map 1000)]
+        (send-to-all-around fc-network-wrapper (dissoc nbt-map :send :target :range) target range)))))
 
 (let [net-sub (sub fc-network-receive :send-all (chan))]
   (go
