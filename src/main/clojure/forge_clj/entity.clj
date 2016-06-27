@@ -77,3 +77,6 @@
                                   (swap! (~'.-data ~this-sym) assoc (:key nbt-data#) (:val nbt-data#))))))))
                       (swap! (~'.-data ~this-sym) assoc :world ~'world :entity ~'entity)
                       nil)))))
+
+(defmacro defentity
+  [class-name & args])
