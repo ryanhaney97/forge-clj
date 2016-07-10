@@ -7,7 +7,8 @@
     [forge-clj.network :refer [fc-network-send fc-network-receive]]
     [clojure.core.async :refer [>!! <! chan sub go]])
   (:import
-    [net.minecraftforge.common IExtendedEntityProperties]))
+    [net.minecraftforge.common IExtendedEntityProperties]
+    [net.minecraft.entity Entity EntityCreature]))
 
 ;Creates a class used to store extended properties.
 (defmacro defextendedproperties
@@ -19,18 +20,18 @@
   :on-save - called before saving nbt data, with an instance of this passed to it."
   [class-name & args]
   (let [classdata (apply hash-map args)
-        name-ns (get classdata :ns *ns*)
-        classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `IExtendedEntityProperties))
+        name-ns (:ns classdata *ns*)
+        classdata (assoc classdata :interfaces (conj (:interfaces classdata []) `IExtendedEntityProperties))
         prefix (str class-name "-")
         fullname (get-fullname name-ns class-name)
         this-sym (with-meta 'this {:tag fullname})
-        on-load (get classdata :on-load `(constantly nil))
-        on-save (get classdata :on-save `(constantly nil))
+        on-load (:on-load classdata `(constantly nil))
+        on-save (:on-save classdata `(constantly nil))
         sync-data (:sync-data classdata [])
         dont-save (conj (:dont-save classdata []) :world :entity)
         classdata (dissoc classdata :on-load :on-save :sync-data :dont-save)
-        client-sync-event (keyword (gensym "client-sync"))
-        server-sync-event (keyword (gensym "server-sync"))
+        server-sync-event (keyword (gensym "server-sync-event"))
+        client-sync-event (keyword (gensym "client-sync-event"))
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
                        (if (remote? (:world ~'this))
@@ -78,5 +79,65 @@
                       (swap! (~'.-data ~this-sym) assoc :world ~'world :entity ~'entity)
                       nil)))))
 
-(defmacro defentity
-  [class-name & args])
+(defmacro defmob
+  [class-name & args]
+  (let [classdata (apply hash-map args)
+        name-ns (:ns classdata *ns*)
+        prefix (str class-name "-")
+        fullname (get-fullname name-ns class-name)
+        this-sym (with-meta 'this {:tag fullname})
+        on-load (:on-load classdata `(constantly nil))
+        on-save (:on-save classdata `(constantly nil))
+        sync-data (:sync-data classdata [])
+        dont-save (conj (:dont-save classdata []) :world)
+        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save)
+        server-sync-event (keyword (gensym "server-sync-event"))
+        client-sync-event (keyword (gensym "client-sync-event"))
+        on-change `(fn [~'this ~'obj-key ~'obj-val]
+                     (when (some #{~'obj-key} ~sync-data)
+                       (if (remote? (:world ~'this))
+                         (>!! fc-network-send {:key ~'obj-key
+                                               :val ~'obj-val
+                                               :send :server
+                                               :id ~server-sync-event})
+                         (>!! fc-network-send {:key ~'obj-key
+                                               :val ~'obj-val
+                                               :send :all
+                                               :id ~client-sync-event}))))
+        classdata (if (and (not (:on-change classdata)) (not (empty? sync-data)))
+                    (assoc classdata :on-change on-change)
+                    classdata)
+        classdata (assoc classdata :expose '{entityInit superEntityInit})]
+    `(do
+       (defassocclass EntityCreature ~class-name ~classdata)
+       (with-prefix ~prefix
+                    (defn ~'readEntityFromNBT [~'this ~'compound]
+                      (let [data# (~'.-data ~this-sym)
+                            not-saved# (select-keys (deref data#) ~dont-save)]
+                        (apply swap! data# dissoc ~dont-save)
+                        (read-tag-data! data# ~'compound)
+                        (swap! data# merge not-saved#))
+                      (~on-load ~this-sym))
+                    (defn ~'writeEntityToNBT [~'this ~'compound]
+                      (~on-save ~this-sym)
+                      (let [data# (~'.-data ~this-sym)
+                            not-saved# (select-keys (deref data#) ~dont-save)]
+                        (apply swap! data# dissoc ~dont-save)
+                        (write-tag-data! data# ~'compound)
+                        (swap! data# merge not-saved#)))
+                    (defn ~'entityInit [~'this]
+                      (.superEntityInit ~this-sym)
+                      (let [world# (~'.-worldObj ~this-sym)]
+                        (when (not (empty? ~sync-data))
+                          (if (remote? world#)
+                            (let [client-sub# (sub fc-network-receive ~client-sync-event (chan))]
+                              (go
+                                (while true
+                                  (let [nbt-data# (<! client-sub#)]
+                                    (swap! (~'.-data ~this-sym) assoc (:key nbt-data#) (:val nbt-data#))))))
+                            (let [server-sub# (sub fc-network-receive ~server-sync-event (chan))]
+                              (go
+                                (while true
+                                  (let [nbt-data# (<! server-sub#)]
+                                    (swap! (~'.-data ~this-sym) assoc (:key nbt-data#) (:val nbt-data#)))))))))
+                      nil)))))

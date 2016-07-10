@@ -229,8 +229,9 @@
      `(do
         (defclass ~superclass ~class-name ~classdata)
         (with-prefix ~prefix
-                     (defn ~'initialize []
-                       [[] (atom ~fields)])
+                     (defn ~'initialize
+                       ([~'& ~'args]
+                         [(into [] ~'args) (atom ~fields)]))
                      (defn ~'assoc [~'this ~'obj-key ~'obj-val]
                        (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
                        (~on-change ~'this ~'obj-key ~'obj-val)
