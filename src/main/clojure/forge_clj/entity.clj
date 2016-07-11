@@ -3,9 +3,9 @@
   (:require
     [forge-clj.nbt :refer [read-tag-data! write-tag-data!]]
     [forge-clj.core :refer [defassocclass get-data]]
-    [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id]]
+    [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id deep-merge]]
     [forge-clj.network :refer [fc-network-send fc-network-receive]]
-    [clojure.core.async :refer [>!! <! chan sub go]]
+    [clojure.core.async :refer [>!! >! <! chan sub go timeout]]
     [clojure.string :as string])
   (:import
     [net.minecraftforge.common IExtendedEntityProperties]
@@ -35,6 +35,7 @@
         event-base (str (string/replace (str name-ns) #"\." "-") "-" class-name "-")
         server-sync-event (keyword (str event-base "server-sync-event"))
         client-sync-event (keyword (str event-base "client-sync-event"))
+        init-sync-event (keyword (str event-base "init-sync-event"))
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
                        (if (remote? (:world ~'this))
@@ -70,14 +71,31 @@
                          ~'world (:world ~'nbt-data)
                          ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
                          ~this-sym (get-extended-properties ~'entity ~(str class-name))]
-                     (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data))))))))
+                     (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data))))))
+             (let [init-sub# (sub fc-network-receive ~init-sync-event (chan))]
+               (go
+                 (while true
+                   (let [~'nbt-data (<! init-sub#)
+                         ~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
+                         ~'world (:world ~'nbt-data)
+                         ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
+                         ~this-sym (get-extended-properties ~'entity ~(str class-name))]
+                     (swap! (get-data ~this-sym) deep-merge ~'nbt-sync-data)))))))
        (with-prefix ~prefix
                     (defn ~'loadNBTData [~'this ~'compound]
                       (let [data# (~'.-data ~this-sym)
                             not-saved# (select-keys (deref data#) ~dont-save)]
                         (apply swap! data# dissoc ~dont-save)
                         (read-tag-data! data# ~'compound)
-                        (swap! data# merge not-saved#))
+                        (swap! data# merge not-saved#)
+                        (when (and (not (empty? ~sync-data)) (:entity ~'this) (not (remote? (:world ~'this))))
+                          (let [~'message (assoc (select-keys (deref data#) ~sync-data)
+                                            :send :all
+                                            :entity-id (get-entity-id (:entity ~'this))
+                                            :id ~init-sync-event)]
+                            (go
+                              (<! (timeout 100))
+                              (>! fc-network-send ~'message)))))
                       (~on-load ~this-sym))
                     (defn ~'saveNBTData [~'this ~'compound]
                       (~on-save ~this-sym)
@@ -121,18 +139,19 @@
         event-base (str (string/replace (str name-ns) #"\." "-") "-" class-name "-")
         server-sync-event (keyword (str event-base "server-sync-event"))
         client-sync-event (keyword (str event-base "client-sync-event"))
+        init-sync-event (keyword (str event-base "init-sync-event"))
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
                        (if (remote? (~'.-worldObj ~this-sym))
                          (>!! fc-network-send {:key ~'obj-key
                                                :val ~'obj-val
                                                :send :server
-                                               :entity-id (~'.getEntityId ~this-sym)
+                                               :entity-id (get-entity-id ~this-sym)
                                                :id ~server-sync-event})
                          (>!! fc-network-send {:key ~'obj-key
                                                :val ~'obj-val
                                                :send :all
-                                               :entity-id (~'.getEntityId ~this-sym)
+                                               :entity-id (get-entity-id ~this-sym)
                                                :id ~client-sync-event}))))
         classdata (if (and (not (:on-change classdata)) (not (empty? sync-data)))
                     (assoc classdata :on-change on-change)
@@ -157,7 +176,15 @@
                    (let [~'nbt-data (<! server-sub#)
                          ~'world (:world ~'nbt-data)
                          ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
-                     (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data))))))))
+                     (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data))))))
+             (let [init-sub# (sub fc-network-receive ~init-sync-event (chan))]
+               (go
+                 (while true
+                   (let [~'nbt-data (<! init-sub#)
+                         ~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
+                         ~'world (:world ~'nbt-data)
+                         ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
+                     (swap! (get-data ~this-sym) deep-merge ~'nbt-sync-data)))))))
        (with-prefix ~prefix
                     (defn ~'readEntityFromNBT [~'this ~'compound]
                       (~'.superReadEntityFromNBT ~this-sym ~'compound)
@@ -165,7 +192,15 @@
                             not-saved# (select-keys (deref data#) ~dont-save)]
                         (apply swap! data# dissoc ~dont-save)
                         (read-tag-data! data# ~'compound)
-                        (swap! data# merge not-saved#))
+                        (swap! data# merge not-saved#)
+                        (when (not (empty? ~sync-data))
+                          (let [~'message (assoc (select-keys (deref data#) ~sync-data)
+                                            :send :all
+                                            :entity-id (get-entity-id (:entity ~'this))
+                                            :id ~init-sync-event)]
+                            (go
+                              (<! (timeout 100))
+                              (>! fc-network-send ~'message)))))
                       (~on-load ~this-sym))
                     (defn ~'writeEntityToNBT [~'this ~'compound]
                       (~'.superWriteEntityToNBT ~this-sym ~'compound)
