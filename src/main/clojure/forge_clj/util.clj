@@ -113,6 +113,12 @@
   [^Entity entity id]
   (.getExtendedProperties entity (str id)))
 
+(defn get-entity-by-id [^World world id]
+  (.getEntityByID world (int id)))
+
+(defn get-entity-id [^Entity entity]
+  (.getEntityId entity))
+
 (defn open-gui
   "Given a player, an instance of the mod, a gui's id, the current world, x, y, and z, attempts to open a gui."
   [^EntityPlayer player mod-instance id world x y z]

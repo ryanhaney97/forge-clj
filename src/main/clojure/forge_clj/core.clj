@@ -208,6 +208,12 @@
     `(def ~obj-name (genobjclass ~obj-name ~superclass ~constructor-args ~objdata))
     `(def ~obj-name (genobj ~superclass ~constructor-args ~objdata))))
 
+(definterface IClojureData
+  (getData []))
+
+(defn get-data [^IClojureData obj]
+  (.getData obj))
+
 (defmacro defassocclass
   "DEFCLASS: Creates a class with the specified superclass (optional), class name, and classdata.
   This class implements ITransientAssociative, and as such classes created with this can be treated similarly to a hash-map.
@@ -219,7 +225,7 @@
    (let [name-ns (get classdata :ns *ns*)
          on-change (:on-change classdata `(constantly nil))
          classdata (dissoc classdata :on-change)
-         classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
+         classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative `IClojureData)
                                     :init 'initialize
                                     :state 'data)
          fields (get classdata :fields {})
@@ -245,7 +251,9 @@
                        ([~'this ~'obj]
                          (get (deref (~'.-data ~this-sym)) ~'obj))
                        ([~'this ~'obj ~'notfound]
-                         (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound)))))))
+                         (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound)))
+                     (defn ~'getData [~'this]
+                       (~'.-data ~this-sym))))))
   ([class-name classdata]
    `(defassocclass nil ~class-name ~classdata)))
 
