@@ -12,8 +12,7 @@
   (let [nbt-map (assoc nbt-map :minecraft (minecraft-instance))
         nbt-map (assoc nbt-map :player (.-thePlayer ^Minecraft (:minecraft nbt-map))
                                :world (.-theWorld ^Minecraft (:minecraft nbt-map))
-                               :context context
-                               :receive (:id nbt-map :client))]
+                               :context context)]
     (.addScheduledTask ^Minecraft (:minecraft nbt-map)
                        (reify Runnable
                          (run [_]
