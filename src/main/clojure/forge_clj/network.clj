@@ -5,7 +5,7 @@
     [forge-clj.nbt :refer [nbt->map map->nbt]]
     [forge-clj.core :refer [defclass init-chan]]
     [forge-clj.util :refer [get-fullname with-prefix]]
-    [clojure.core.async :refer [chan go >!! <!! <! >! pub sub] :as async])
+    [clojure.core.async :refer [chan go go-loop >!! <!! <! >! pub sub] :as async])
   (:import
     [net.minecraft.nbt NBTTagCompound]
     [net.minecraftforge.fml.relauncher Side]
@@ -100,7 +100,7 @@
          target (get-target-point target range)]
      (.sendToAllAround network packet target)))
   ([^SimpleNetworkWrapper network nbt-map target]
-    (send-to-all-around network nbt-map target 1000)))
+   (send-to-all-around network nbt-map target 1000)))
 
 (defn send-to-all
   "Sends a message along the specified network from the server to all clients.
@@ -123,18 +123,35 @@
 
 (declare fc-network-wrapper)
 
-(def fc-network-send (chan 10))
+(def fc-network-send (chan 100))
 (def fc-network-receive (pub fc-network-send partition-fc-network))
 
-(defn on-packet-from-client [nbt-map ^MessageContext context]
-  (let [nbt-map (assoc nbt-map :player (.-playerEntity (.getServerHandler context)))
-        nbt-map (assoc nbt-map :world (.getServerForPlayer ^EntityPlayerMP (:player nbt-map))
-                               :context context)]
-    (.addScheduledTask ^WorldServer (:world nbt-map)
+(defn schedule-task [world f]
+  (if (instance? WorldServer world)
+    (.addScheduledTask ^WorldServer world
                        (reify Runnable
                          (run [_]
-                           (>!! fc-network-send nbt-map))))
-    nil))
+                           (f))))
+    (.addScheduledTask ^net.minecraft.client.Minecraft world
+                       (reify Runnable
+                         (run [_]
+                           (f))))))
+
+(defn on-packet-from-client [nbt-map ^MessageContext context]
+  (schedule-task (.getServerForPlayer (.-playerEntity (.getServerHandler context)))
+                 (fn []
+                   (let [nbt-map (assoc nbt-map :player (.-playerEntity (.getServerHandler context)))
+                         nbt-map (assoc nbt-map :world (.getServerForPlayer ^EntityPlayerMP (:player nbt-map))
+                                                :context context)]
+                     (>!! fc-network-send nbt-map))))
+  nil)
+
+(defn net-listen [id fn]
+  (let [net-sub (sub fc-network-receive id (chan))]
+    (go-loop [data (<! net-sub)]
+             (schedule-task (:minecraft data (:world data))
+                            (partial fn data))
+             (recur (<! net-sub)))))
 
 (gen-packet-handler fc-common-packet-handler on-packet-from-client)
 

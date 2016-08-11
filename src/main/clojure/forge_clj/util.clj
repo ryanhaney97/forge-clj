@@ -2,7 +2,8 @@
   "Large variety of utility functions and macros that are just plain useful.
   Available to both Client and Server."
   (:require
-    [clojure.string :as string])
+    [clojure.string :as string]
+    [clojure.core.async :refer [timeout <!!]])
   (:import
     [java.lang.reflect Field Modifier]
     [net.minecraft.block Block]
@@ -254,6 +255,13 @@
   Not a macro like Clojure's new keyword, so can be used with class names that are stored in symbols."
   [klass & args]
   (clojure.lang.Reflector/invokeConstructor klass (into-array Object args)))
+
+(definterface IForgeCljSyncData
+  (syncData []))
+
+(defn sync-data [obj]
+  (when (and obj (instance? forge_clj.util.IForgeCljSyncData obj))
+    (.syncData ^IForgeCljSyncData obj)))
 
 ;(defn fill-blocks-class []
 ;  (let [dummy-block (Block. net.minecraft.block.material.Material/rock)
