@@ -36,23 +36,17 @@
         dont-save (conj (:dont-save classdata []) :world :entity)
         classdata (dissoc classdata :on-load :on-save :sync-data :dont-save)
         event-base (str (string/replace (str name-ns) #"\." "-") "-" class-name "-")
-        server-sync-event (keyword (str event-base "server-sync-event"))
-        client-sync-event (keyword (str event-base "client-sync-event"))
+        sync-event (keyword (str event-base "sync-event"))
         init-sync-event (keyword (str event-base "init-sync-event"))
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
-                       (if (remote? (:world ~'this))
-                         (>!! fc-network-send {:key ~'obj-key
-                                               :val ~'obj-val
-                                               :send :server
-                                               :entity-id (get-entity-id (:entity ~'this))
-                                               :id ~server-sync-event})
-                         (>!! fc-network-send {:key ~'obj-key
-                                               :val ~'obj-val
-                                               :send :around
-                                               :target (:entity ~'this)
-                                               :entity-id (get-entity-id (:entity ~'this))
-                                               :id ~client-sync-event}))))
+                       (>!! fc-network-send (merge {:key ~'obj-key
+                                                    :val ~'obj-val
+                                                    :entity-id (get-entity-id (:entity ~'this))
+                                                    :id ~sync-event} (if (remote? (:world ~'this))
+                                                                       {:send :server}
+                                                                       {:send :around
+                                                                        :target (:entity ~'this)})))))
         classdata (if (and (not (:on-change classdata)) (not (empty? sync-data)))
                     (assoc classdata :on-change on-change)
                     classdata)]
@@ -60,13 +54,7 @@
        (defassocclass ~class-name ~classdata)
        ~(when (not-empty sync-data)
           `(do
-             (net-listen ~client-sync-event
-                         (fn [~'nbt-data]
-                           (let [~'world (:world ~'nbt-data)
-                                 ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
-                                 ~this-sym (get-extended-properties ~'entity ~(str class-name))]
-                             (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data)))))
-             (net-listen ~server-sync-event
+             (net-listen ~sync-event
                          (fn [~'nbt-data]
                            (let [~'world (:world ~'nbt-data)
                                  ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
@@ -144,23 +132,17 @@
         attributes (:attributes classdata {})
         classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :attributes)
         event-base (str (string/replace (str name-ns) #"\." "-") "-" class-name "-")
-        server-sync-event (keyword (str event-base "server-sync-event"))
-        client-sync-event (keyword (str event-base "client-sync-event"))
+        sync-event (keyword (str event-base "sync-event"))
         init-sync-event (keyword (str event-base "init-sync-event"))
-        request-init-sync-event (keyword (str event-base "request-sync-event"))
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
-                       (if (remote? (~'.-worldObj ~this-sym))
-                         (>!! fc-network-send {:key ~'obj-key
-                                               :val ~'obj-val
-                                               :send :server
-                                               :entity-id (get-entity-id ~this-sym)
-                                               :id ~server-sync-event})
-                         (>!! fc-network-send {:key ~'obj-key
-                                               :val ~'obj-val
-                                               :send :all
-                                               :entity-id (get-entity-id ~this-sym)
-                                               :id ~client-sync-event}))))
+                       (>!! fc-network-send (merge {:key ~'obj-key
+                                                    :val ~'obj-val
+                                                    :entity-id (get-entity-id ~'this)
+                                                    :id ~sync-event} (if (remote? (:world ~'this))
+                                                                       {:send :server}
+                                                                       {:send :around
+                                                                        :target ~'this})))))
         classdata (if (and (not (:on-change classdata)) (not (empty? sync-data)))
                     (assoc classdata :on-change on-change)
                     classdata)
@@ -174,39 +156,17 @@
        (defassocclass EntityCreature ~class-name ~classdata)
        ~(when (not (empty? sync-data))
           `(do
-             (let [client-sub# (sub fc-network-receive ~client-sync-event (chan))]
-               (go
-                 (while true
-                   (let [~'nbt-data (<! client-sub#)
-                         ~'world (:world ~'nbt-data)
-                         ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
-                     (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data))))))
-             (let [server-sub# (sub fc-network-receive ~server-sync-event (chan))]
-               (go
-                 (while true
-                   (let [~'nbt-data (<! server-sub#)
-                         ~'world (:world ~'nbt-data)
-                         ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
-                     (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data))))))
-             (let [init-sub# (sub fc-network-receive ~init-sync-event (chan))]
-               (go
-                 (while true
-                   (let [~'nbt-data (<! init-sub#)
-                         ~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
-                         ~'world (:world ~'nbt-data)
-                         ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
-                     (swap! (get-data ~this-sym) deep-merge ~'nbt-sync-data)))))
-             (let [request-sub# (sub fc-network-receive ~request-init-sync-event (chan))]
-               (go
-                 (while true
-                   (let [~'nbt-data (<! request-sub#)
-                         ~'world (:world ~'nbt-data)
-                         ~'this (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
-                     (>! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
-                                           :send :to
-                                           :target (:player ~'nbt-data)
-                                           :entity-id (get-entity-id ~'this)
-                                           :id ~init-sync-event))))))))
+             (net-listen ~sync-event
+                         (fn [~'nbt-data]
+                           (let [~'world (:world ~'nbt-data)
+                                 ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
+                             (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data)))))
+             (net-listen ~init-sync-event
+                         (fn [~'nbt-data]
+                           (let [~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
+                                 ~'world (:world ~'nbt-data)
+                                 ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
+                             (swap! (get-data ~this-sym) deep-merge ~'nbt-sync-data))))))
        (with-prefix ~prefix
                     (defn ~'readEntityFromNBT [~'this ~'compound]
                       (~'.superReadEntityFromNBT ~this-sym ~'compound)
@@ -231,13 +191,15 @@
                     ~(when (not-empty sync-data)
                        `(defn ~'syncData
                           ([~'this]
-                            (if (remote? (.-worldObj ~this-sym))
-                              (>!! fc-network-send {:send :all
-                                                    :id ~request-init-sync-event
-                                                    :entity-id (get-entity-id ~'this)})))
+                            (if (not (remote? (.-worldObj ~this-sym)))
+                              (>!! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
+                                                     :send :all
+                                                     :id ~init-sync-event
+                                                     :entity-id (get-entity-id ~'this)))))
                           ([~'this ~'player]
-                            (if (remote? (.-worldObj ~this-sym))
-                              (>!! fc-network-send {:send :to
-                                                    :target ~'player
-                                                    :id ~request-init-sync-event
-                                                    :entity-id (get-entity-id ~'this)})))))))))
+                            (if (not (remote? (.-worldObj ~this-sym)))
+                              (>!! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
+                                                     :send :to
+                                                     :target ~'player
+                                                     :id ~init-sync-event
+                                                     :entity-id (get-entity-id ~'this)))))))))))
