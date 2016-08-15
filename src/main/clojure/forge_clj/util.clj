@@ -257,11 +257,16 @@
   (clojure.lang.Reflector/invokeConstructor klass (into-array Object args)))
 
 (definterface IForgeCljSyncData
-  (syncData []))
+  (syncData [])
+  (syncData [^net.minecraft.entity.player.EntityPlayer player]))
 
-(defn sync-data [obj]
-  (when (and obj (instance? forge_clj.util.IForgeCljSyncData obj))
-    (.syncData ^IForgeCljSyncData obj)))
+(defn sync-data
+  ([obj]
+   (when (and obj (instance? forge_clj.util.IForgeCljSyncData obj))
+     (.syncData ^IForgeCljSyncData obj)))
+  ([obj ^EntityPlayer player]
+   (when (and obj (instance? forge_clj.util.IForgeCljSyncData obj))
+     (.syncData ^IForgeCljSyncData obj player))))
 
 ;(defn fill-blocks-class []
 ;  (let [dummy-block (Block. net.minecraft.block.material.Material/rock)

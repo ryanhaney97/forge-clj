@@ -49,7 +49,8 @@
                                                :id ~server-sync-event})
                          (>!! fc-network-send {:key ~'obj-key
                                                :val ~'obj-val
-                                               :send :all
+                                               :send :around
+                                               :target (:entity ~'this)
                                                :entity-id (get-entity-id (:entity ~'this))
                                                :id ~client-sync-event}))))
         classdata (if (and (not (:on-change classdata)) (not (empty? sync-data)))
@@ -97,13 +98,22 @@
                       (swap! (~'.-data ~this-sym) assoc :world ~'world :entity ~'entity)
                       nil)
                     ~(when (not-empty sync-data)
-                       `(defn ~'syncData [~'this]
-                          (if (not (remote? (:world ~'this)))
-                            (go
-                              (>! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
-                                                    :send :all
-                                                    :id ~init-sync-event
-                                                    :entity-id (get-entity-id (:entity ~'this))))))))))))
+                       `(defn ~'syncData
+                          ([~'this]
+                            (if (not (remote? (:world ~'this)))
+                              (go
+                                (>! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
+                                                      :send :all
+                                                      :id ~init-sync-event
+                                                      :entity-id (get-entity-id (:entity ~'this)))))))
+                          ([~'this ~'player]
+                            (if (not (remote? (:world ~'this)))
+                              (go
+                                (>! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
+                                                      :send :to
+                                                      :target ~'player
+                                                      :id ~init-sync-event
+                                                      :entity-id (get-entity-id (:entity ~'this)))))))))))))
 
 (def shared-monster-attributes-map
   {:max-health SharedMonsterAttributes/maxHealth
@@ -219,8 +229,15 @@
                       (dorun (map (fn [~'entry]
                                     (set-attribute-base ~this-sym (key ~'entry) (val ~'entry))) ~attributes)))
                     ~(when (not-empty sync-data)
-                       `(defn ~'syncData [~'this]
-                          (if (remote? (.-worldObj ~this-sym))
-                            (>!! fc-network-send {:send :all
-                                                  :id ~request-init-sync-event
-                                                  :entity-id (get-entity-id ~'this)}))))))))
+                       `(defn ~'syncData
+                          ([~'this]
+                            (if (remote? (.-worldObj ~this-sym))
+                              (>!! fc-network-send {:send :all
+                                                    :id ~request-init-sync-event
+                                                    :entity-id (get-entity-id ~'this)})))
+                          ([~'this ~'player]
+                            (if (remote? (.-worldObj ~this-sym))
+                              (>!! fc-network-send {:send :to
+                                                    :target ~'player
+                                                    :id ~request-init-sync-event
+                                                    :entity-id (get-entity-id ~'this)})))))))))

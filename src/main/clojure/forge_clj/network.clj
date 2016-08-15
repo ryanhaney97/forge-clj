@@ -100,7 +100,7 @@
          target (get-target-point target range)]
      (.sendToAllAround network packet target)))
   ([^SimpleNetworkWrapper network nbt-map target]
-   (send-to-all-around network nbt-map target 1000)))
+   (send-to-all-around network nbt-map target 100)))
 
 (defn send-to-all
   "Sends a message along the specified network from the server to all clients.
@@ -172,7 +172,7 @@
     (while true
       (let [nbt-map (<! net-sub)
             target (:target nbt-map)
-            range (:range nbt-map 1000)]
+            range (:range nbt-map 100)]
         (send-to-all-around fc-network-wrapper (dissoc nbt-map :send :target :range) target range)))))
 
 (let [net-sub (sub fc-network-receive :send-all (chan))]
