@@ -153,36 +153,32 @@
                             (partial fn data))
              (recur (<! net-sub)))))
 
-(gen-packet-handler fc-common-packet-handler on-packet-from-client)
+(gen-packet-handler fc-network-common-packet-handler on-packet-from-client)
+
+(let [net-sub (sub fc-network-receive :send-to (chan))]
+  (go-loop [nbt-map (<! net-sub)]
+           (let [target (:target nbt-map)]
+             (send-to fc-network-wrapper (dissoc nbt-map :send :target) target)
+             (recur (<! net-sub)))))
+
+(let [net-sub (sub fc-network-receive :send-around (chan))]
+  (go-loop [nbt-map (<! net-sub)]
+           (let [target (:target nbt-map)
+                 range (:range nbt-map 100)]
+             (send-to-all-around fc-network-wrapper (dissoc nbt-map :send :target :range) target range)
+             (recur (<! net-sub)))))
+
+(let [net-sub (sub fc-network-receive :send-all (chan))]
+  (go-loop [nbt-map (<! net-sub)]
+           (send-to-all fc-network-wrapper (dissoc nbt-map :send))
+           (recur (<! net-sub))))
+
+(let [net-sub (sub fc-network-receive :send-server (chan))]
+  (go-loop [nbt-map (<! net-sub)]
+           (send-to-server fc-network-wrapper (dissoc nbt-map :send))
+           (recur (<! net-sub))))
 
 (go
   (<! init-chan)
   (def fc-network-wrapper (create-network "fc-network-wrapper"))
-  (register-message fc-network-wrapper fc-common-packet-handler 0 :server))
-
-(let [net-sub (sub fc-network-receive :send-to (chan))]
-  (go
-    (while true
-      (let [nbt-map (<! net-sub)
-            target (:target nbt-map)]
-        (send-to fc-network-wrapper (dissoc nbt-map :send :target) target)))))
-
-(let [net-sub (sub fc-network-receive :send-around (chan))]
-  (go
-    (while true
-      (let [nbt-map (<! net-sub)
-            target (:target nbt-map)
-            range (:range nbt-map 100)]
-        (send-to-all-around fc-network-wrapper (dissoc nbt-map :send :target :range) target range)))))
-
-(let [net-sub (sub fc-network-receive :send-all (chan))]
-  (go
-    (while true
-      (let [nbt-map (<! net-sub)]
-        (send-to-all fc-network-wrapper (dissoc nbt-map :send))))))
-
-(let [net-sub (sub fc-network-receive :send-server (chan))]
-  (go
-    (while true
-      (let [nbt-map (<! net-sub)]
-        (send-to-server fc-network-wrapper (dissoc nbt-map :send))))))
+  (register-message fc-network-wrapper fc-network-common-packet-handler 0 :server))
