@@ -116,15 +116,10 @@
   (let [packet (NbtPacket. nbt-map)]
     (.sendToServer network packet)))
 
-(defn partition-fc-network [send-map]
+(defn partition-network [send-map]
   (if (:send send-map)
     (keyword (str "send-" (name (:send send-map :all))))
     (:id send-map)))
-
-(declare fc-network-wrapper)
-
-(def fc-network-send (chan 100))
-(def fc-network-receive (pub fc-network-send partition-fc-network))
 
 (defn schedule-task [world f]
   (if (instance? WorldServer world)
@@ -137,48 +132,67 @@
                          (run [_]
                            (f))))))
 
-(defn on-packet-from-client [nbt-map ^MessageContext context]
-  (schedule-task (.getServerForPlayer (.-playerEntity (.getServerHandler context)))
-                 (fn []
-                   (let [nbt-map (assoc nbt-map :player (.-playerEntity (.getServerHandler context)))
-                         nbt-map (assoc nbt-map :world (.getServerForPlayer ^EntityPlayerMP (:player nbt-map))
-                                                :context context)]
-                     (>!! fc-network-send nbt-map))))
-  nil)
+(defmacro defnetwork [network-name]
+  (let [with-name (comp symbol (partial str network-name))]
+    `(do
+       (def ~(with-name "-wrapper") (atom nil))
 
-(defn net-listen [id fn]
-  (let [net-sub (sub fc-network-receive id (chan))]
-    (go-loop [data (<! net-sub)]
-             (schedule-task (:minecraft data (:world data))
-                            (partial fn data))
-             (recur (<! net-sub)))))
+       (def ~(with-name "-send") (chan 100))
+       (def ~(with-name "-receive") (pub ~(with-name "-send") partition-network))
 
-(gen-packet-handler fc-network-common-packet-handler on-packet-from-client)
+       (defn ~(with-name "-on-packet-from-client") [~'nbt-map ~'context]
+         (schedule-task (.getServerForPlayer (.-playerEntity (.getServerHandler ~(with-meta 'context `{:tag MessageContext}))))
+                        (fn []
+                          (let [~'nbt-map (assoc ~'nbt-map :player (.-playerEntity (.getServerHandler ~(with-meta 'context `{:tag MessageContext}))))
+                                ~'nbt-map (assoc ~'nbt-map :world (.getServerForPlayer ~(with-meta `(:player ~'nbt-map) `{:tag EntityPlayerMP}))
+                                                           :context ~'context)]
+                            (>!! ~(with-name "-send") ~'nbt-map))))
+         nil)
 
-(let [net-sub (sub fc-network-receive :send-to (chan))]
-  (go-loop [nbt-map (<! net-sub)]
-           (let [target (:target nbt-map)]
-             (send-to fc-network-wrapper (dissoc nbt-map :send :target) target)
-             (recur (<! net-sub)))))
+       (defn ~(with-name "-listen") [~'id ~'fn]
+         (let [~'net-sub (sub ~(with-name "-receive") ~'id (chan))]
+           (go-loop [~'data (<! ~'net-sub)]
+                    (schedule-task (:minecraft ~'data (:world ~'data))
+                                   (partial ~'fn ~'data))
+                    (recur (<! ~'net-sub)))))
 
-(let [net-sub (sub fc-network-receive :send-around (chan))]
-  (go-loop [nbt-map (<! net-sub)]
-           (let [target (:target nbt-map)
-                 range (:range nbt-map 100)]
-             (send-to-all-around fc-network-wrapper (dissoc nbt-map :send :target :range) target range)
-             (recur (<! net-sub)))))
+       (gen-packet-handler ~(with-name "-common-packet-handler") ~(with-name "-on-packet-from-client"))
 
-(let [net-sub (sub fc-network-receive :send-all (chan))]
-  (go-loop [nbt-map (<! net-sub)]
-           (send-to-all fc-network-wrapper (dissoc nbt-map :send))
-           (recur (<! net-sub))))
+       (let [~'net-sub (sub ~(with-name "-receive") :send-to (chan))]
+         (go-loop [~'nbt-map (<! ~'net-sub)]
+                  (let [~'target (:target ~'nbt-map)]
+                    (send-to (deref ~(with-name "-wrapper")) (dissoc ~'nbt-map :send :target) ~'target)
+                    (recur (<! ~'net-sub)))))
 
-(let [net-sub (sub fc-network-receive :send-server (chan))]
-  (go-loop [nbt-map (<! net-sub)]
-           (send-to-server fc-network-wrapper (dissoc nbt-map :send))
-           (recur (<! net-sub))))
+       (let [~'net-sub (sub ~(with-name "-receive") :send-around (chan))]
+         (go-loop [~'nbt-map (<! ~'net-sub)]
+                  (let [~'target (:target ~'nbt-map)
+                        ~'range (:range ~'nbt-map 100)]
+                    (send-to-all-around (deref ~(with-name "-wrapper")) (dissoc ~'nbt-map :send :target :range) ~'target ~'range)
+                    (recur (<! ~'net-sub)))))
+
+       (let [~'net-sub (sub ~(with-name "-receive") :send-all (chan))]
+         (go-loop [~'nbt-map (<! ~'net-sub)]
+                  (send-to-all (deref ~(with-name "-wrapper")) (dissoc ~'nbt-map :send))
+                  (recur (<! ~'net-sub))))
+
+       (let [~'net-sub (sub ~(with-name "-receive") :send-server (chan))]
+         (go-loop [~'nbt-map (<! ~'net-sub)]
+                  (send-to-server (deref ~(with-name "-wrapper")) (dissoc ~'nbt-map :send))
+                  (recur (<! ~'net-sub))))
+
+       (defn ~(with-name "-init") []
+         (reset! ~(with-name "-wrapper") (create-network ~(str network-name)))
+         (register-message (deref ~(with-name "-wrapper")) ~(with-name "-common-packet-handler") 0 :server))
+
+       (def ~network-name {:send ~(with-name "-send")
+                           :receive ~(with-name "-receive")
+                           :listen ~(with-name "-listen")
+                           :wrapper ~(with-name "-wrapper")
+                           :name ~(str network-name)}))))
+
+(defnetwork fc-network)
 
 (go
   (<! init-chan)
-  (def fc-network-wrapper (create-network "fc-network-wrapper"))
-  (register-message fc-network-wrapper fc-network-common-packet-handler 0 :server))
+  (fc-network-init))

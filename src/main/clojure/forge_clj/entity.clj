@@ -4,7 +4,7 @@
     [forge-clj.nbt :refer [read-tag-data! write-tag-data!]]
     [forge-clj.core :refer [defassocclass get-data]]
     [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id deep-merge]]
-    [forge-clj.network :refer [fc-network-send fc-network-receive net-listen]]
+    [forge-clj.network :refer [fc-network]]
     [clojure.core.async :refer [>!! >! <! chan sub go timeout]]
     [clojure.string :as string])
   (:import
@@ -34,13 +34,14 @@
         on-load (:on-load classdata `(constantly nil))
         on-save (:on-save classdata `(constantly nil))
         dont-save (conj (:dont-save classdata []) :world :entity)
-        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save)
+        network (:network classdata `fc-network)
+        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :network)
         event-base (str (string/replace (str name-ns) #"\." "-") "-" class-name "-")
         sync-event (keyword (str event-base "sync-event"))
         init-sync-event (keyword (str event-base "init-sync-event"))
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
-                       (>!! fc-network-send (merge {:key ~'obj-key
+                       (>!! (:send ~network) (merge {:key ~'obj-key
                                                     :val ~'obj-val
                                                     :entity-id (get-entity-id (:entity ~'this))
                                                     :id ~sync-event} (if (remote? (:world ~'this))
@@ -54,13 +55,13 @@
        (defassocclass ~class-name ~classdata)
        ~(when (not-empty sync-data)
           `(do
-             (net-listen ~sync-event
+             ((:listen ~network) ~sync-event
                          (fn [~'nbt-data]
                            (let [~'world (:world ~'nbt-data)
                                  ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
                                  ~this-sym (get-extended-properties ~'entity ~(str class-name))]
                              (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data)))))
-             (net-listen ~init-sync-event
+             ((:listen ~network) ~init-sync-event
                          (fn [~'nbt-data]
                            (let [~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
                                  ~'world (:world ~'nbt-data)
@@ -90,14 +91,14 @@
                           ([~'this]
                             (if (not (remote? (:world ~'this)))
                               (go
-                                (>! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
+                                (>! (:send ~network) (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
                                                       :send :all
                                                       :id ~init-sync-event
                                                       :entity-id (get-entity-id (:entity ~'this)))))))
                           ([~'this ~'player]
                             (if (not (remote? (:world ~'this)))
                               (go
-                                (>! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
+                                (>! (:send ~network) (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
                                                       :send :to
                                                       :target ~'player
                                                       :id ~init-sync-event
@@ -130,13 +131,14 @@
         sync-data (:sync-data classdata [])
         dont-save (:dont-save classdata [])
         attributes (:attributes classdata {})
-        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :attributes)
+        network (:network classdata fc-network)
+        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :attributes :network)
         event-base (str (string/replace (str name-ns) #"\." "-") "-" class-name "-")
         sync-event (keyword (str event-base "sync-event"))
         init-sync-event (keyword (str event-base "init-sync-event"))
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
-                       (>!! fc-network-send (merge {:key ~'obj-key
+                       (>!! (:send ~network) (merge {:key ~'obj-key
                                                     :val ~'obj-val
                                                     :entity-id (get-entity-id ~'this)
                                                     :id ~sync-event} (if (remote? (:world ~'this))
@@ -156,12 +158,12 @@
        (defassocclass EntityCreature ~class-name ~classdata)
        ~(when (not (empty? sync-data))
           `(do
-             (net-listen ~sync-event
+             ((:listen ~network) ~sync-event
                          (fn [~'nbt-data]
                            (let [~'world (:world ~'nbt-data)
                                  ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
                              (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data)))))
-             (net-listen ~init-sync-event
+             ((:listen ~network) ~init-sync-event
                          (fn [~'nbt-data]
                            (let [~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
                                  ~'world (:world ~'nbt-data)
@@ -192,13 +194,13 @@
                        `(defn ~'syncData
                           ([~'this]
                             (if (not (remote? (.-worldObj ~this-sym)))
-                              (>!! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
+                              (>!! (:send ~network) (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
                                                      :send :all
                                                      :id ~init-sync-event
                                                      :entity-id (get-entity-id ~'this)))))
                           ([~'this ~'player]
                             (if (not (remote? (.-worldObj ~this-sym)))
-                              (>!! fc-network-send (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
+                              (>!! (:send ~network) (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
                                                      :send :to
                                                      :target ~'player
                                                      :id ~init-sync-event
