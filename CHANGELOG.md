@@ -2,6 +2,16 @@
 
 ##Minecraft 1.8.9
 
+###Version 0.6.2
+
+- Fixed the new networking system, which had various issues.
+
+- Also fixed the syncing mechanism on Extended Entity Properties. Note that it now requires an initial sync to be performed in an event handler.
+
+- Generalized the networking system by placing it in a macro, allowing you to create a new separate network for your mod.
+
+- Added some entity stuff via the defmob macro, but please don't use it yet, as it is incomplete. I'll begin work on finishing it next.
+
 ###Version 0.6.1
 
 - Added core.async to the project as a whole. It is now a shaded dependency alongside clojure itself.
