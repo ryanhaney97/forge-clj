@@ -208,6 +208,12 @@
     `(def ~obj-name (genobjclass ~obj-name ~superclass ~constructor-args ~objdata))
     `(def ~obj-name (genobj ~superclass ~constructor-args ~objdata))))
 
+(definterface IClojureData
+  (getData []))
+
+(defn get-data [^IClojureData obj]
+  (.getData obj))
+
 (defmacro defassocclass
   "DEFCLASS: Creates a class with the specified superclass (optional), class name, and classdata.
   This class implements ITransientAssociative, and as such classes created with this can be treated similarly to a hash-map.
@@ -219,7 +225,7 @@
    (let [name-ns (get classdata :ns *ns*)
          on-change (:on-change classdata `(constantly nil))
          classdata (dissoc classdata :on-change)
-         classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative)
+         classdata (assoc classdata :interfaces (conj (get classdata :interfaces []) `clojure.lang.ITransientAssociative `IClojureData)
                                     :init 'initialize
                                     :state 'data)
          fields (get classdata :fields {})
@@ -229,8 +235,9 @@
      `(do
         (defclass ~superclass ~class-name ~classdata)
         (with-prefix ~prefix
-                     (defn ~'initialize []
-                       [[] (atom ~fields)])
+                     (defn ~'initialize
+                       ([~'& ~'args]
+                         [(into [] ~'args) (atom ~fields)]))
                      (defn ~'assoc [~'this ~'obj-key ~'obj-val]
                        (swap! (~'.-data ~this-sym) assoc ~'obj-key ~'obj-val)
                        (~on-change ~'this ~'obj-key ~'obj-val)
@@ -244,7 +251,9 @@
                        ([~'this ~'obj]
                          (get (deref (~'.-data ~this-sym)) ~'obj))
                        ([~'this ~'obj ~'notfound]
-                         (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound)))))))
+                         (get (deref (~'.-data ~this-sym)) ~'obj ~'notfound)))
+                     (defn ~'getData [~'this]
+                       (~'.-data ~this-sym))))))
   ([class-name classdata]
    `(defassocclass nil ~class-name ~classdata)))
 
@@ -252,7 +261,7 @@
 ;----------------------------
 
 (gen-class
-  :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.6.1"}} forge_clj.core.ForgeClj
+  :name ^{Mod {:name "ForgeClj" :modid "forge-clj" :version "0.6.2"}} forge_clj.core.ForgeClj
   :prefix "forge-clj-"
   :methods [[^{Mod$EventHandler []} preInit [net.minecraftforge.fml.common.event.FMLPreInitializationEvent] void]
             [^{Mod$EventHandler []} init [net.minecraftforge.fml.common.event.FMLInitializationEvent] void]

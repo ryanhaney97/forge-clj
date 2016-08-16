@@ -2,7 +2,8 @@
   "Large variety of utility functions and macros that are just plain useful.
   Available to both Client and Server."
   (:require
-    [clojure.string :as string])
+    [clojure.string :as string]
+    [clojure.core.async :refer [timeout <!!]])
   (:import
     [java.lang.reflect Field Modifier]
     [net.minecraft.block Block]
@@ -112,6 +113,12 @@
   "Gets the extended entity properties from the specified entity with the provided string id."
   [^Entity entity id]
   (.getExtendedProperties entity (str id)))
+
+(defn get-entity-by-id [^World world id]
+  (.getEntityByID world (int id)))
+
+(defn get-entity-id [^Entity entity]
+  (.getEntityId entity))
 
 (defn open-gui
   "Given a player, an instance of the mod, a gui's id, the current world, x, y, and z, attempts to open a gui."
@@ -248,6 +255,18 @@
   Not a macro like Clojure's new keyword, so can be used with class names that are stored in symbols."
   [klass & args]
   (clojure.lang.Reflector/invokeConstructor klass (into-array Object args)))
+
+(definterface IForgeCljSyncData
+  (syncData [])
+  (syncData [^net.minecraft.entity.player.EntityPlayer player]))
+
+(defn sync-data
+  ([obj]
+   (when (and obj (instance? forge_clj.util.IForgeCljSyncData obj))
+     (.syncData ^IForgeCljSyncData obj)))
+  ([obj ^EntityPlayer player]
+   (when (and obj (instance? forge_clj.util.IForgeCljSyncData obj))
+     (.syncData ^IForgeCljSyncData obj player))))
 
 ;(defn fill-blocks-class []
 ;  (let [dummy-block (Block. net.minecraft.block.material.Material/rock)

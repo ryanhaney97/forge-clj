@@ -3,12 +3,13 @@
   (:require
     [forge-clj.util :refer [get-fullname gen-classname]])
   (:import
-    [net.minecraftforge.fml.common.eventhandler SubscribeEvent]))
+    [net.minecraftforge.fml.common.eventhandler SubscribeEvent EventPriority]))
 
 (def event-packages
   (atom
     ["net.minecraftforge.fml.common.event."
      "net.minecraftforge.fml.client.event."
+     "net.minecraftforge.fml.common.gameevent."
      "net.minecraftforge.event."
      "net.minecraftforge.event.brewing."
      "net.minecraftforge.event.entity."
@@ -42,6 +43,13 @@
   (let [event (gen-classname (name k))]
     (try-to-resolve-event @event-packages event)))
 
+(def priority-map
+  {:highest `EventPriority/HIGHEST
+   :high `EventPriority/HIGH
+   :normal `EventPriority/NORMAL
+   :low `EventPriority/LOW
+   :lowest `EventPriority/LOWEST})
+
 (defn gen-event-signiture
   "Creates a method signiture for the given map entry containing things pertaining to events.
   The key is the name of the method (to be defined by the user later),
@@ -56,7 +64,7 @@
         event (if (keyword? event)
                 (get-event-from-key event)
                 event)
-        priority (:priority event-map)]
+        priority (get priority-map (:priority event-map) (:priority event-map))]
     `[~(with-meta method-name `{SubscribeEvent ~(if priority
                                                   `[~priority]
                                                   `[])}) [~event] ~'void]))

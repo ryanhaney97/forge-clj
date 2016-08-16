@@ -11,7 +11,7 @@
     [net.minecraft.entity Entity]
     [net.minecraft.tileentity TileEntity]
     [net.minecraftforge.common MinecraftForge BiomeDictionary BiomeManager BiomeDictionary$Type BiomeManager$BiomeType BiomeManager$BiomeEntry]
-    [net.minecraftforge.fml.common.registry GameRegistry]
+    [net.minecraftforge.fml.common.registry GameRegistry EntityRegistry]
     [net.minecraftforge.fml.common FMLCommonHandler IWorldGenerator]
     [net.minecraftforge.fml.common.network NetworkRegistry IGuiHandler]))
 
@@ -98,17 +98,25 @@
   [^Entity entity id ^IExtendedEntityProperties properties]
   (.registerExtendedProperties entity (str id) properties))
 
+(defn register-entity
+  ([entity entity-name id mod tracking-range update-frequency sends-velocity-updates?]
+    (EntityRegistry/registerModEntity entity entity-name id mod tracking-range update-frequency sends-velocity-updates?))
+  ([entity entity-name id mod tracking-range update-frequency sends-velocity-updates? egg-color1 egg-color2]
+   (EntityRegistry/registerModEntity entity entity-name id mod tracking-range update-frequency sends-velocity-updates? egg-color1 egg-color2)))
+
 (defn register-gui-handler
   "Registers a gui handler for the specified mod instance."
   [mod-instance handler]
   (.registerGuiHandler ^NetworkRegistry (NetworkRegistry/INSTANCE) mod-instance handler))
 
 (defn differentiate-class-registers [& args]
-  (let [superclass (.getSuperclass ^Class (first args))]
-    (if (and (= (count args) 2) (= superclass TileEntity))
+  (let [superclasses (supers ^Class (first args))]
+    (if (and (= (count args) 2) (some #{TileEntity} superclasses))
       (apply register-tile-entity args)
-      (if (= (count args) 1)
-        (register-events (first args))))))
+      (if (and (or (= (count args) 7) (= (count args) 9)) (some #{Entity} superclasses))
+        (apply register-entity args)
+        (if (= (count args) 1)
+          (register-events (first args)))))))
 
 (defn differentiate-entity-registers [& args]
   (if (and (= (count args) 3) (instance? IExtendedEntityProperties (last args)))
