@@ -2,7 +2,7 @@
   "Contains macros and functions related to entities and extended entity properties."
   (:require
     [forge-clj.nbt :refer [read-tag-data! write-tag-data!]]
-    [forge-clj.core :refer [defassocclass get-data]]
+    [forge-clj.core :refer [defassocclass get-data genobj]]
     [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id deep-merge]]
     [forge-clj.network :refer [fc-network]]
     [clojure.core.async :refer [>!! >! <! chan sub go timeout]]
@@ -11,7 +11,8 @@
     [forge_clj.util IForgeCljSyncData]
     [net.minecraftforge.common IExtendedEntityProperties]
     [net.minecraft.entity EntityLiving EntityCreature SharedMonsterAttributes]
-    [net.minecraft.entity.ai.attributes IAttributeInstance]))
+    [net.minecraft.entity.ai.attributes IAttributeInstance]
+    [net.minecraft.entity.ai EntityAIBase]))
 
 ;Creates a class used to store extended properties.
 (defmacro defextendedproperties
@@ -42,12 +43,12 @@
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
                        (>!! (:send ~network) (merge {:key ~'obj-key
-                                                    :val ~'obj-val
-                                                    :entity-id (get-entity-id (:entity ~'this))
-                                                    :id ~sync-event} (if (remote? (:world ~'this))
-                                                                       {:send :server}
-                                                                       {:send :around
-                                                                        :target (:entity ~'this)})))))
+                                                     :val ~'obj-val
+                                                     :entity-id (get-entity-id (:entity ~'this))
+                                                     :id ~sync-event} (if (remote? (:world ~'this))
+                                                                        {:send :server}
+                                                                        {:send :around
+                                                                         :target (:entity ~'this)})))))
         classdata (if (and (not (:on-change classdata)) (not (empty? sync-data)))
                     (assoc classdata :on-change on-change)
                     classdata)]
@@ -56,18 +57,18 @@
        ~(when (not-empty sync-data)
           `(do
              ((:listen ~network) ~sync-event
-                         (fn [~'nbt-data]
-                           (let [~'world (:world ~'nbt-data)
-                                 ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
-                                 ~this-sym (get-extended-properties ~'entity ~(str class-name))]
-                             (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data)))))
+               (fn [~'nbt-data]
+                 (let [~'world (:world ~'nbt-data)
+                       ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
+                       ~this-sym (get-extended-properties ~'entity ~(str class-name))]
+                   (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data)))))
              ((:listen ~network) ~init-sync-event
-                         (fn [~'nbt-data]
-                           (let [~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
-                                 ~'world (:world ~'nbt-data)
-                                 ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
-                                 ~this-sym (get-extended-properties ~'entity ~(str class-name))]
-                             (swap! (get-data ~this-sym) deep-merge ~'nbt-sync-data))))))
+               (fn [~'nbt-data]
+                 (let [~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
+                       ~'world (:world ~'nbt-data)
+                       ~'entity (get-entity-by-id ~'world (:entity-id ~'nbt-data))
+                       ~this-sym (get-extended-properties ~'entity ~(str class-name))]
+                   (swap! (get-data ~this-sym) deep-merge ~'nbt-sync-data))))))
        (with-prefix ~prefix
                     (defn ~'loadNBTData [~'this ~'compound]
                       (let [data# (~'.-data ~this-sym)
@@ -92,17 +93,17 @@
                             (if (not (remote? (:world ~'this)))
                               (go
                                 (>! (:send ~network) (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
-                                                      :send :all
-                                                      :id ~init-sync-event
-                                                      :entity-id (get-entity-id (:entity ~'this)))))))
+                                                       :send :all
+                                                       :id ~init-sync-event
+                                                       :entity-id (get-entity-id (:entity ~'this)))))))
                           ([~'this ~'player]
                             (if (not (remote? (:world ~'this)))
                               (go
                                 (>! (:send ~network) (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
-                                                      :send :to
-                                                      :target ~'player
-                                                      :id ~init-sync-event
-                                                      :entity-id (get-entity-id (:entity ~'this)))))))))))))
+                                                       :send :to
+                                                       :target ~'player
+                                                       :id ~init-sync-event
+                                                       :entity-id (get-entity-id (:entity ~'this)))))))))))))
 
 (def shared-monster-attributes-map
   {:max-health SharedMonsterAttributes/maxHealth
@@ -118,6 +119,30 @@
 
 (defn set-attribute-base [^EntityLiving entity attribute base-val]
   (.setBaseValue ^IAttributeInstance (get-attribute entity attribute) (double base-val)))
+
+(defn get-mutex [compatible]
+  (if (= compatible :all)
+    8
+    (if (empty? compatible)
+      7
+      (if (some #{:swimming} compatible)
+        (if (or (some #{:begging} compatible) (some #{:watch-closest} compatible))
+          1
+          3)
+        5))))
+
+(defn make-ai [entity {:keys [mutex compatible execute? start continue] :or {compatible []}}]
+  (let [mutex (int (if mutex
+                     mutex
+                     (get-mutex compatible)))
+        execute? (partial execute? entity)
+        start (partial start entity)
+        continue (patial continue entity)]
+    (genobj EntityAIBase []
+            {:mutex-bits mutex
+             :override {:should-execute execute?
+                        :start-executing start
+                        :continue-executing continue}})))
 
 (defmacro defmob
   [class-name & args]
@@ -139,12 +164,12 @@
         on-change `(fn [~'this ~'obj-key ~'obj-val]
                      (when (some #{~'obj-key} ~sync-data)
                        (>!! (:send ~network) (merge {:key ~'obj-key
-                                                    :val ~'obj-val
-                                                    :entity-id (get-entity-id ~'this)
-                                                    :id ~sync-event} (if (remote? (:world ~'this))
-                                                                       {:send :server}
-                                                                       {:send :around
-                                                                        :target ~'this})))))
+                                                     :val ~'obj-val
+                                                     :entity-id (get-entity-id ~'this)
+                                                     :id ~sync-event} (if (remote? (:world ~'this))
+                                                                        {:send :server}
+                                                                        {:send :around
+                                                                         :target ~'this})))))
         classdata (if (and (not (:on-change classdata)) (not (empty? sync-data)))
                     (assoc classdata :on-change on-change)
                     classdata)
@@ -159,16 +184,16 @@
        ~(when (not (empty? sync-data))
           `(do
              ((:listen ~network) ~sync-event
-                         (fn [~'nbt-data]
-                           (let [~'world (:world ~'nbt-data)
-                                 ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
-                             (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data)))))
+               (fn [~'nbt-data]
+                 (let [~'world (:world ~'nbt-data)
+                       ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
+                   (swap! (get-data ~this-sym) assoc (:key ~'nbt-data) (:val ~'nbt-data)))))
              ((:listen ~network) ~init-sync-event
-                         (fn [~'nbt-data]
-                           (let [~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
-                                 ~'world (:world ~'nbt-data)
-                                 ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
-                             (swap! (get-data ~this-sym) deep-merge ~'nbt-sync-data))))))
+               (fn [~'nbt-data]
+                 (let [~'nbt-sync-data (select-keys ~'nbt-data ~sync-data)
+                       ~'world (:world ~'nbt-data)
+                       ~this-sym (get-entity-by-id ~'world (:entity-id ~'nbt-data))]
+                   (swap! (get-data ~this-sym) deep-merge ~'nbt-sync-data))))))
        (with-prefix ~prefix
                     (defn ~'readEntityFromNBT [~'this ~'compound]
                       (~'.superReadEntityFromNBT ~this-sym ~'compound)
@@ -195,13 +220,13 @@
                           ([~'this]
                             (if (not (remote? (.-worldObj ~this-sym)))
                               (>!! (:send ~network) (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
-                                                     :send :all
-                                                     :id ~init-sync-event
-                                                     :entity-id (get-entity-id ~'this)))))
+                                                      :send :all
+                                                      :id ~init-sync-event
+                                                      :entity-id (get-entity-id ~'this)))))
                           ([~'this ~'player]
                             (if (not (remote? (.-worldObj ~this-sym)))
                               (>!! (:send ~network) (assoc (select-keys (deref (get-data ~'this)) ~sync-data)
-                                                     :send :to
-                                                     :target ~'player
-                                                     :id ~init-sync-event
-                                                     :entity-id (get-entity-id ~'this)))))))))))
+                                                      :send :to
+                                                      :target ~'player
+                                                      :id ~init-sync-event
+                                                      :entity-id (get-entity-id ~'this)))))))))))
