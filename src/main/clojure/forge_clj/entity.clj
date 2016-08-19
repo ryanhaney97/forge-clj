@@ -3,7 +3,7 @@
   (:require
     [forge-clj.nbt :refer [read-tag-data! write-tag-data!]]
     [forge-clj.core :refer [defassocclass get-data genobj]]
-    [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id deep-merge]]
+    [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id deep-merge construct]]
     [forge-clj.network :refer [fc-network]]
     [clojure.core.async :refer [>!! >! <! chan sub go timeout]]
     [clojure.string :as string])
@@ -131,13 +131,14 @@
           3)
         5))))
 
-(defn make-ai [entity {:keys [mutex compatible execute? start continue] :or {compatible []}}]
+(defn make-ai [entity {:keys [mutex compatible execute? start continue]
+                       :or {compatible []}}]
   (let [mutex (int (if mutex
                      mutex
                      (get-mutex compatible)))
         execute? (partial execute? entity)
         start (partial start entity)
-        continue (patial continue entity)]
+        continue (partial continue entity)]
     (genobj EntityAIBase []
             {:mutex-bits mutex
              :override {:should-execute execute?
@@ -157,7 +158,17 @@
         dont-save (:dont-save classdata [])
         attributes (:attributes classdata {})
         network (:network classdata fc-network)
-        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :attributes :network)
+        ai (:ai classdata [])
+        target-ai (:target-ai classdata [])
+        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :attributes :network :ai)
+        task-calls (map (fn [task]
+                          (if (:type task)
+                            `(~'.addTask (~'.-tasks ~this-sym) ~(:priority task 0) (apply construct ~(:type task) ~this-sym ~(:args task `[])))
+                            `(~'.addTask (~'.-tasks ~this-sym) ~(:priority task 0) (make-ai ~this-sym ~task)))) ai)
+        target-task-calls (map (fn [task]
+                                 (if (:type task)
+                                   `(~'.addTask (~'.-targetTasks ~this-sym) ~(:priority task 0) (apply construct ~(:type task) ~this-sym ~(:args task `[])))
+                                   `(~'.addTask (~'.-targetTasks ~this-sym) ~(:priority task 0) (make-ai ~this-sym ~task)))) target-ai)
         event-base (str (string/replace (str name-ns) #"\." "-") "-" class-name "-")
         sync-event (keyword (str event-base "sync-event"))
         init-sync-event (keyword (str event-base "init-sync-event"))
@@ -170,14 +181,17 @@
                                                                         {:send :server}
                                                                         {:send :around
                                                                          :target ~'this})))))
-        classdata (if (and (not (:on-change classdata)) (not (empty? sync-data)))
+        classdata (if (and (not (:on-change classdata)) (not-empty sync-data))
                     (assoc classdata :on-change on-change)
                     classdata)
         classdata (assoc classdata :expose '{readEntityFromNBT superReadEntityFromNBT
                                              writeEntityToNBT superWriteEntityToNBT
                                              applyEntityAttributes superApplyEntityAttributes})
-        classdata (if (not (empty? sync-data))
+        classdata (if (not-empty sync-data)
                     (assoc classdata :interfaces (conj (:interfaces classdata []) `IForgeCljSyncData))
+                    classdata)
+        classdata (if (or (not-empty ai) (not-empty target-ai))
+                    (assoc classdata :post-init "post-init")
                     classdata)]
     `(do
        (defassocclass EntityCreature ~class-name ~classdata)
@@ -229,4 +243,8 @@
                                                       :send :to
                                                       :target ~'player
                                                       :id ~init-sync-event
-                                                      :entity-id (get-entity-id ~'this)))))))))))
+                                                      :entity-id (get-entity-id ~'this)))))))
+                    ~(when (or (not-empty ai) (not-empty target-ai))
+                       `(defn ~'post-init [~'this ~'& ~'args]
+                          ~@task-calls
+                          ~@target-task-calls))))))
