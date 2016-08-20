@@ -145,7 +145,7 @@
                         :start-executing start
                         :continue-executing continue}})))
 
-(defmacro defmob
+(defmacro defcreature
   [class-name & args]
   (let [classdata (apply hash-map args)
         name-ns (:ns classdata *ns*)
