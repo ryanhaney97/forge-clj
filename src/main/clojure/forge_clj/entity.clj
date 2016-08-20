@@ -173,7 +173,7 @@
         ai (:ai classdata [])
         target-ai (:target-ai classdata [])
         clean-ai? (:clean-ai? classdata)
-        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :attributes :network :ai)
+        classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :attributes :network :ai :type :clean-ai?)
         task-calls (map (fn [task]
                           (if (:type task)
                             `(~'.addTask (~'.-tasks ~this-sym) ~(:priority task 0) (apply construct ~(:type task) ~this-sym ~(:args task `[])))
