@@ -14,6 +14,16 @@
     [net.minecraft.entity.ai.attributes IAttributeInstance]
     [net.minecraft.entity.ai EntityAIBase]))
 
+(defn make-entity-map [package entities]
+  (apply merge (map #(hash-map %1 (get-fullname (symbol package) (str "entity-" (name %1)))) entities)))
+
+(def entity-map
+  (merge
+    (make-entity-map "net.minecraft.entity" [:creature :ageable :flying :living])
+    (make-entity-map "net.minecraft.entity.passive" [:animal :bat :chicken :cow :horse :mooshroom :ocelot :pig :rabbit :sheep :squid :wolf :water-mob :tameable :ambient-creature])
+    (make-entity-map "net.minecraft.entity.monster" [:blaze :cave-spider :creeper :enderman :endermite :ghast :giant-zombie :golem :guardian :iron-golem :magma-cube :mob :pig-zombie :silverfish :skeleton :slime :snowman :spider :witch :zombie])
+    (make-entity-map "net.minecraft.entity.boss" [:dragon :wither])))
+
 ;Creates a class used to store extended properties.
 (defmacro defextendedproperties
   "DEFASSOCCLASS: Creates a class implementing IExtendedEntityProperties.
@@ -158,8 +168,11 @@
         dont-save (:dont-save classdata [])
         attributes (:attributes classdata {})
         network (:network classdata fc-network)
+        entity-type (:type classdata :creature)
+        entity-type (get entity-map entity-type entity-type)
         ai (:ai classdata [])
         target-ai (:target-ai classdata [])
+        clean-ai? (:clean-ai? classdata)
         classdata (dissoc classdata :on-load :on-save :sync-data :dont-save :attributes :network :ai)
         task-calls (map (fn [task]
                           (if (:type task)
@@ -194,7 +207,7 @@
                     (assoc classdata :post-init "post-init")
                     classdata)]
     `(do
-       (defassocclass EntityCreature ~class-name ~classdata)
+       (defassocclass ~entity-type ~class-name ~classdata)
        ~(when (not (empty? sync-data))
           `(do
              ((:listen ~network) ~sync-event
@@ -246,5 +259,9 @@
                                                       :entity-id (get-entity-id ~'this)))))))
                     ~(when (or (not-empty ai) (not-empty target-ai))
                        `(defn ~'post-init [~'this ~'& ~'args]
+                          ~(when clean-ai?
+                             `(do
+                                (.clear (.taskEntries (.-tasks ~this-sym)))
+                                (.clear (.taskEntries (.-targetTasks ~this-sym)))))
                           ~@task-calls
                           ~@target-task-calls))))))
