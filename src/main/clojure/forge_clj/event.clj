@@ -1,7 +1,7 @@
 (ns forge-clj.event
   "Contains macros and functions for creating an event handler."
   (:require
-    [forge-clj.util :refer [get-fullname gen-classname]])
+    [forge-clj.util :refer [get-fullname gen-classname gen-method with-prefix]])
   (:import
     [net.minecraftforge.fml.common.eventhandler SubscribeEvent EventPriority]))
 
@@ -58,16 +58,27 @@
   Otherwise it expects the full package name of the class along with the name to be provided.
   Optionally a :priority can be provided, which is the event priority."
   [map-entry]
-  (let [method-name (symbol (apply str (rest (str (key map-entry)))))
-        event-map (val map-entry)
-        event (:event event-map)
+  (let [method-name (gen-method (key map-entry))
+        event (key map-entry)
         event (if (keyword? event)
                 (get-event-from-key event)
                 event)
-        priority (get priority-map (:priority event-map) (:priority event-map))]
+        priority (get priority-map (:priority (val map-entry)) (:priority (val map-entry)))]
     `[~(with-meta method-name `{SubscribeEvent ~(if priority
                                                   `[~priority]
                                                   `[])}) [~event] ~'void]))
+
+(defn gen-event-definition
+  [map-entry]
+  (let [method-name (gen-method (key map-entry))
+        event-name (key map-entry)
+        event-type (if (keyword? event-name)
+                     (get-event-from-key event-name)
+                     event-name)
+        event-sym (with-meta 'event `{:tag ~event-type})
+        event-fn (:fn (val map-entry) `(constantly nil))]
+    `(defn ~method-name [~'this ~event-sym]
+       (~event-fn ~event-sym))))
 
 (defmacro gen-events
   "MACRO: Creates an event handler given the handler name and a series of arguments representing the events
@@ -78,10 +89,13 @@
         events (dissoc events :ns)
         fullname (get-fullname name-ns handler-name)
         signitures (mapv gen-event-signiture events)
+        definitions (map gen-event-definition events)
         prefix (str handler-name "-")]
     `(do
        (gen-class
          :name ~fullname
          :prefix ~prefix
          :methods ~signitures)
+       (with-prefix ~prefix
+                    ~@definitions)
        (def ~handler-name (new ~fullname)))))

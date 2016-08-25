@@ -5,12 +5,14 @@
     [forge-clj.core :refer [defassocclass get-data genobj]]
     [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id deep-merge construct]]
     [forge-clj.network :refer [fc-network]]
+    [forge-clj.registry :refer [register-extended-properties]]
     [clojure.core.async :refer [>!! >! <! chan sub go timeout]]
     [clojure.string :as string])
   (:import
     [forge_clj.util IForgeCljSyncData]
     [net.minecraftforge.common IExtendedEntityProperties]
-    [net.minecraft.entity EntityLiving EntityCreature SharedMonsterAttributes]
+    [net.minecraftforge.event.entity EntityEvent$EntityConstructing]
+    [net.minecraft.entity EntityLiving SharedMonsterAttributes]
     [net.minecraft.entity.ai.attributes IAttributeInstance]
     [net.minecraft.entity.ai EntityAIBase]))
 
@@ -22,7 +24,8 @@
     (make-entity-map "net.minecraft.entity" [:creature :ageable :flying :living])
     (make-entity-map "net.minecraft.entity.passive" [:animal :bat :chicken :cow :horse :mooshroom :ocelot :pig :rabbit :sheep :squid :wolf :water-mob :tameable :ambient-creature])
     (make-entity-map "net.minecraft.entity.monster" [:blaze :cave-spider :creeper :enderman :endermite :ghast :giant-zombie :golem :guardian :iron-golem :magma-cube :mob :pig-zombie :silverfish :skeleton :slime :snowman :spider :witch :zombie])
-    (make-entity-map "net.minecraft.entity.boss" [:dragon :wither])))
+    (make-entity-map "net.minecraft.entity.boss" [:dragon :wither])
+    (make-entity-map "net.minecraft.entity.player" [:player])))
 
 ;Creates a class used to store extended properties.
 (defmacro defextendedproperties
@@ -114,6 +117,14 @@
                                                        :target ~'player
                                                        :id ~init-sync-event
                                                        :entity-id (get-entity-id (:entity ~'this)))))))))))))
+
+(defn add-extended-properties [^EntityEvent$EntityConstructing event applied-entities property-name properties]
+  (let [entity (.-entity event)
+        applied-entities (map #(get entity-map %1 %1) applied-entities)]
+    (when (and (reduce #(if (instance? %2 entity)
+                       (reduced true)
+                       false) false (map #(if (symbol? %1) (resolve %1) %1) applied-entities)) (nil? (get-extended-properties entity property-name)))
+      (register-extended-properties entity property-name (construct properties)))))
 
 (def shared-monster-attributes-map
   {:max-health SharedMonsterAttributes/maxHealth

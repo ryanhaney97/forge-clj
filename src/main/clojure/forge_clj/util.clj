@@ -54,6 +54,9 @@
   "Given a key word, returns a java method as a symbol by capitalizing all but the first word."
   [k]
   (let [key-name (name k)
+        key-name (if (= (count (string/split key-name #"\.")) 1)
+                   key-name
+                   (last (string/split key-name #"\.")))
         words (string/split key-name #"-")
         method-name (apply str (first words) (map string/capitalize (rest words)))]
     (symbol method-name)))
