@@ -3,7 +3,7 @@
   Available to both Client and Server."
   (:require
     [clojure.string :as string]
-    [clojure.core.async :refer [timeout <!!]])
+    [clojure.core.async :refer [timeout <! go]])
   (:import
     [java.lang.reflect Field Modifier]
     [net.minecraft.block Block]
@@ -270,6 +270,11 @@
   ([obj ^EntityPlayer player]
    (when (and obj (instance? forge_clj.util.IForgeCljSyncData obj))
      (.syncData ^IForgeCljSyncData obj player))))
+
+(defn wait [millis f]
+  (go
+    (<! (timeout millis))
+    (f)))
 
 ;(defn fill-blocks-class []
 ;  (let [dummy-block (Block. net.minecraft.block.material.Material/rock)

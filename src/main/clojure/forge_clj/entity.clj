@@ -3,7 +3,7 @@
   (:require
     [forge-clj.nbt :refer [read-tag-data! write-tag-data!]]
     [forge-clj.core :refer [defassocclass get-data genobj]]
-    [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id deep-merge construct]]
+    [forge-clj.util :refer [get-fullname with-prefix remote? get-extended-properties get-entity-by-id get-entity-id deep-merge construct sync-data]]
     [forge-clj.network :refer [fc-network]]
     [forge-clj.registry :refer [register-extended-properties]]
     [clojure.core.async :refer [>!! >! <! chan sub go timeout]]
@@ -14,14 +14,16 @@
     [net.minecraftforge.event.entity EntityEvent$EntityConstructing]
     [net.minecraft.entity EntityLiving SharedMonsterAttributes]
     [net.minecraft.entity.ai.attributes IAttributeInstance]
-    [net.minecraft.entity.ai EntityAIBase]))
+    [net.minecraft.entity.ai EntityAIBase]
+    [net.minecraftforge.event.entity.player PlayerEvent$StartTracking]
+    [net.minecraftforge.fml.common.gameevent PlayerEvent$PlayerLoggedInEvent]))
 
 (defn make-entity-map [package entities]
   (apply merge (map #(hash-map %1 (get-fullname (symbol package) (str "entity-" (name %1)))) entities)))
 
 (def entity-map
   (merge
-    (make-entity-map "net.minecraft.entity" [:creature :ageable :flying :living])
+    (make-entity-map "net.minecraft.entity" [:entity :creature :ageable :flying :living])
     (make-entity-map "net.minecraft.entity.passive" [:animal :bat :chicken :cow :horse :mooshroom :ocelot :pig :rabbit :sheep :squid :wolf :water-mob :tameable :ambient-creature])
     (make-entity-map "net.minecraft.entity.monster" [:blaze :cave-spider :creeper :enderman :endermite :ghast :giant-zombie :golem :guardian :iron-golem :magma-cube :mob :pig-zombie :silverfish :skeleton :slime :snowman :spider :witch :zombie])
     (make-entity-map "net.minecraft.entity.boss" [:dragon :wither])
@@ -122,9 +124,26 @@
   (let [entity (.-entity event)
         applied-entities (map #(get entity-map %1 %1) applied-entities)]
     (when (and (reduce #(if (instance? %2 entity)
-                       (reduced true)
-                       false) false (map #(if (symbol? %1) (resolve %1) %1) applied-entities)) (nil? (get-extended-properties entity property-name)))
+                         (reduced true)
+                         false) false (map #(if (symbol? %1) (resolve %1) %1) applied-entities)) (nil? (get-extended-properties entity property-name)))
       (register-extended-properties entity property-name (construct properties)))))
+
+(defn init-sync
+  ([^PlayerEvent$StartTracking event]
+   (let [entity (.-target event)
+         player (.-entityPlayer event)]
+     (when (instance? IForgeCljSyncData entity)
+       (sync-data entity player))))
+  ([^PlayerEvent$StartTracking event applied-entities property-name]
+   (let [entity (.-target event)
+         player (.-entityPlayer event)
+         applied-entities (map #(get entity-map %1 %1) applied-entities)]
+     (when (reduce #(if (instance? %2 entity)
+                     (reduced true)
+                     false) false (map #(if (symbol? %1) (resolve %1) %1) applied-entities))
+       (sync-data (get-extended-properties entity property-name) player))))
+  ([^PlayerEvent$PlayerLoggedInEvent event property-name]
+   (sync-data (get-extended-properties (.-player event) property-name) (.-player event))))
 
 (def shared-monster-attributes-map
   {:max-health SharedMonsterAttributes/maxHealth
@@ -178,7 +197,7 @@
         sync-data (:sync-data classdata [])
         dont-save (:dont-save classdata [])
         attributes (:attributes classdata {})
-        network (:network classdata fc-network)
+        network (:network classdata `fc-network)
         entity-type (:type classdata :creature)
         entity-type (get entity-map entity-type entity-type)
         ai (:ai classdata [])
@@ -201,7 +220,7 @@
                        (>!! (:send ~network) (merge {:key ~'obj-key
                                                      :val ~'obj-val
                                                      :entity-id (get-entity-id ~'this)
-                                                     :id ~sync-event} (if (remote? (:world ~'this))
+                                                     :id ~sync-event} (if (remote? (.-worldObj ~this-sym))
                                                                         {:send :server}
                                                                         {:send :around
                                                                          :target ~'this})))))
