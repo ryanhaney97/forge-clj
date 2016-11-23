@@ -1,0 +1,12 @@
+language: java
+jdk:
+- oraclejdk8
+deploy:
+  provider: releases
+  api_key:
+    secure: oYYCDrBtI2Zese/03/HX8Sy0p2kTf4xjL7IsdWEmtTzbVFZmmWLyeKqQ/exuXPspp7z9IThMk+Dfu/VJ06qE8H11y3/5VuTr149kf0olRtWMMyDtZbpW4ALcGnfAkxOaNfZ1pYjcl/uLRcnWfQC2v/clgC5n10I1mQAwzP3glcNVPssM+bhSY1mzI1sdym/2vUZwuS+k1mnxaRVFkrAQFiXCEdYi47ikbe/yETteX8PsO0sEXqDMQsUYX+QLXAMwDaUqs7kIKjK2n9kFJbgVrcHiDVWiJAsB/CxILXnUSu2sq9bvQLDU+FugY/nTNjQVQYuyqiV8Mm5KnmE4D/6Qra8h+QTav+myj7fghmwf3VI7Weup/zIoL1G7uiRPdHrpHsoOjtL7qSylLpFUJ6sshll8+BfTL42cyphaD4OC8k5wgg47Z5g8HFfHj7HOiIF5giPC5aHRKvTnZCzOCutzk9JIOGC/+kVpfrZ7UHL8woT2TW3vvJPAW46DDlwdOYkyfi6P44rUzUA7/naxhEhLoG/xLkk0vJ9KaobONMrah85isUxz71ZKdlAPYufBZv+z1mBbCwxuQV9AQMDskklS+8iPz5aUCHw0/AK//ckX0VfDCd7zsne1QYtfsR8NPrk0zccGb3VZTIVFcmodCLetpLQBjZFV6Wadtkq9EBaLXDg=
+  file: forge_clj*.jar
+  skip_cleanup: true
+  on:
+    tags: true
+    repo: Immortalin/forge-clj
